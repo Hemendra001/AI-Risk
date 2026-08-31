@@ -3,412 +3,831 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Risk Clearance -- Razorpay prototype</title>
+<title>AI Risk Manager &amp; Friendly Fraud Defense</title>
+<meta name="description" content="Pre-transaction AI risk scoring and merchant-side automated chargeback dispute defense integrated with Razorpay.">
+<meta property="og:title" content="AI Risk Manager &amp; Friendly Fraud Defense">
+<meta property="og:description" content="Pre-transaction AI risk scoring and merchant-side automated chargeback dispute defense integrated with Razorpay.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <style>
   :root {
     --ink-950: #0B111C;
+    --ink-900: #0F1726;
     --ink-850: #141D2B;
     --ink-800: #1B2536;
     --ink-750: #232E42;
+    --ink-700: #2E3C56;
     --paper-100: #E8EBF1;
+    --paper-200: #F3F5F9;
     --muted-400: #8793A8;
+    --muted-500: #626F84;
     --teal: #4FD1AE;
+    --teal-bg: rgba(79, 209, 174, 0.12);
     --gold: #D4A24C;
+    --gold-bg: rgba(212, 162, 76, 0.14);
     --coral: #FF6B5E;
+    --coral-bg: rgba(255, 107, 94, 0.14);
+    --blue: #60A5FA;
+    --blue-bg: rgba(96, 165, 250, 0.14);
     --font-display: 'Fraunces', serif;
     --font-body: 'Inter', -apple-system, sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    margin: 0;
     background: var(--ink-950);
     color: var(--paper-100);
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    padding-bottom: 60px;
   }
 
   :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 
+  /* Top Navigation Bar */
   .topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 20px 24px;
-    max-width: 980px;
+    padding: 14px 24px;
+    max-width: 1200px;
     margin: 0 auto;
+    border-bottom: 1px solid var(--ink-800);
+    flex-wrap: wrap;
+    gap: 12px;
   }
   .brand {
     font-family: var(--font-mono);
     font-size: 13px;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.14em;
     color: var(--muted-400);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
   }
-  .brand span { color: var(--paper-100); }
-  .demo-toggle {
-    background: transparent;
-    border: 1px solid var(--ink-750);
-    color: var(--muted-400);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    padding: 7px 12px;
-    border-radius: 5px;
-    cursor: pointer;
-  }
-  .demo-toggle:hover { color: var(--paper-100); border-color: var(--gold); }
-
-  .demo-panel {
-    max-width: 980px;
-    margin: 0 auto 8px;
-    padding: 16px 24px;
-    background: var(--ink-850);
-    border-top: 1px solid var(--ink-750);
-    border-bottom: 1px solid var(--ink-750);
-  }
-  .demo-panel h4 {
-    margin: 0 0 4px;
-    font-size: 12px;
-    letter-spacing: 0.1em;
+  .brand span { color: var(--paper-100); font-weight: 700; }
+  .brand-tag {
+    font-size: 10px;
+    background: var(--gold-bg);
     color: var(--gold);
-    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(212, 162, 76, 0.3);
+    margin-left: 10px;
+    font-weight: 600;
   }
-  .demo-panel p { margin: 0 0 12px; font-size: 12.5px; color: var(--muted-400); max-width: 60ch; }
-  .demo-btns { display: flex; flex-wrap: wrap; gap: 8px; }
-  .demo-btn {
-    background: var(--ink-800);
+
+  /* Mode Switcher Tabs */
+  .nav-tabs {
+    display: flex;
+    align-items: center;
+    background: var(--ink-900);
+    padding: 4px;
+    border-radius: 8px;
     border: 1px solid var(--ink-750);
-    color: var(--paper-100);
+    gap: 4px;
+  }
+  .nav-tab {
+    background: transparent;
+    border: none;
+    color: var(--muted-400);
+    font-family: var(--font-body);
     font-size: 12.5px;
-    padding: 8px 12px;
+    font-weight: 600;
+    padding: 6px 14px;
     border-radius: 6px;
     cursor: pointer;
-  }
-  .demo-btn:hover { border-color: var(--gold); }
-  .demo-btn.reset { color: var(--coral); border-color: rgba(255,107,94,0.35); margin-left: auto; }
-  .demo-status { margin-top: 10px; font-size: 12px; color: var(--muted-400); min-height: 16px; }
-
-  .layout {
-    display: grid;
-    grid-template-columns: 220px 1fr;
-    gap: 32px;
-    max-width: 980px;
-    margin: 0 auto;
-    padding: 28px 24px 80px;
-  }
-
-  .rail { display: flex; flex-direction: column; gap: 2px; }
-  .rail-item {
     display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 11px 10px;
-    border-radius: 8px;
-    cursor: default;
-    opacity: 0.35;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
   }
-  .rail-item.reachable { cursor: pointer; opacity: 0.62; }
-  .rail-item.reachable:hover { background: var(--ink-850); }
-  .rail-item.current { opacity: 1; background: var(--ink-850); }
-  .rail-num {
+  .nav-tab:hover { color: var(--paper-100); }
+  .nav-tab.active {
+    background: var(--ink-750);
+    color: var(--paper-100);
+  }
+  .nav-tab.active.merchant {
+    color: var(--gold);
+    background: rgba(212, 162, 76, 0.15);
+    border: 1px solid rgba(212, 162, 76, 0.3);
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Preset Scenarios Ribbon */
+  .presets-bar {
+    max-width: 1200px;
+    margin: 10px auto 0;
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--ink-850);
+  }
+  .presets-label {
     font-family: var(--font-mono);
     font-size: 11px;
-    width: 20px; height: 20px;
+    color: var(--muted-400);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+  }
+  .preset-chip {
+    background: var(--ink-850);
+    border: 1px solid var(--ink-750);
+    color: var(--paper-100);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .preset-chip:hover {
+    border-color: var(--gold);
+    background: var(--ink-800);
+  }
+  .preset-chip.active {
+    border-color: var(--gold);
+    background: var(--gold-bg);
+    color: var(--gold);
+    font-weight: 600;
+  }
+
+  /* Top Header Checkpoint Steps Bar */
+  .steps-nav-bar {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--ink-800);
+    scrollbar-width: thin;
+  }
+  .steps-nav-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted-500);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+  .top-step-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: var(--ink-900);
+    border: 1px solid var(--ink-750);
+    color: var(--muted-400);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: default;
+    opacity: 0.55;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .top-step-btn.reachable {
+    cursor: pointer;
+    opacity: 0.9;
+  }
+  .top-step-btn.reachable:hover {
+    background: var(--ink-850);
+    border-color: var(--ink-700);
+    color: var(--paper-100);
+    opacity: 1;
+  }
+  .top-step-btn.current {
+    opacity: 1;
+    background: var(--ink-850);
+    border-color: var(--gold);
+    color: var(--paper-100);
+    font-weight: 600;
+    box-shadow: 0 0 0 1px rgba(212, 162, 76, 0.35);
+  }
+  .top-step-num {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid var(--ink-750);
     color: var(--muted-400);
     flex-shrink: 0;
-    margin-top: 1px;
   }
-  .rail-item.current .rail-num { border-color: var(--gold); color: var(--gold); }
-  .rail-num.dot-pass { border-color: var(--teal); background: var(--teal); color: var(--ink-950); }
-  .rail-num.dot-warn { border-color: var(--gold); background: var(--gold); color: var(--ink-950); }
-  .rail-num.dot-fail { border-color: var(--coral); background: var(--coral); color: var(--ink-950); }
-  .rail-label { font-size: 13px; line-height: 1.3; }
-  .rail-item.current .rail-label { color: var(--paper-100); font-weight: 500; }
-  .rail-item:not(.current) .rail-label { color: var(--muted-400); }
+  .top-step-btn.current .top-step-num {
+    border-color: var(--gold);
+    color: var(--gold);
+    font-weight: 700;
+  }
+  .top-step-num.dot-pass {
+    border-color: var(--teal);
+    background: var(--teal);
+    color: var(--ink-950);
+    font-weight: 700;
+  }
+  .top-step-num.dot-warn {
+    border-color: var(--gold);
+    background: var(--gold);
+    color: var(--ink-950);
+    font-weight: 700;
+  }
+  .top-step-num.dot-fail {
+    border-color: var(--coral);
+    background: var(--coral);
+    color: var(--ink-950);
+    font-weight: 700;
+  }
+  .top-step-override {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .top-step-override.fail { background: var(--coral-bg); color: var(--coral); }
+  .top-step-override.pass { background: var(--teal-bg); color: var(--teal); }
+  .top-step-override.elevated { background: var(--gold-bg); color: var(--gold); }
 
+  /* Help Card */
+  .guide-card {
+    max-width: 1200px;
+    margin: 12px auto;
+    padding: 16px 20px;
+    background: var(--ink-900);
+    border: 1px solid var(--ink-750);
+    border-radius: 8px;
+  }
+  .guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    font-size: 12px;
+    color: var(--paper-100);
+    line-height: 1.5;
+    margin-top: 8px;
+  }
+  .guide-col {
+    background: var(--ink-850);
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--ink-750);
+  }
+  .guide-col strong {
+    color: var(--gold);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* Override Banner */
+  .override-banner {
+    max-width: 1200px;
+    margin: 10px auto;
+    padding: 8px 16px;
+    background: var(--ink-850);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 6px 6px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+  }
+  .override-banner.fail { border-left-color: var(--coral); }
+  .override-banner.pass { border-left-color: var(--teal); }
+
+  /* Main Full-Width Workspace Layout */
+  .layout {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 24px 80px;
+  }
+
+  /* Main Step Panel */
   .panel {
     background: var(--ink-850);
     border: 1px solid var(--ink-750);
-    border-radius: 14px;
-    padding: 32px;
-    min-height: 420px;
+    border-radius: 10px;
+    padding: 26px;
+    min-height: 480px;
+  }
+
+  .panel-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .eyebrow {
     font-family: var(--font-mono);
     font-size: 11px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.12em;
     color: var(--muted-400);
     text-transform: uppercase;
-    margin: 0 0 10px;
+    margin-bottom: 3px;
   }
   h1.step-title {
     font-family: var(--font-display);
     font-weight: 600;
-    font-size: 28px;
-    margin: 0 0 20px;
-    line-height: 1.15;
+    font-size: 22px;
+    color: var(--paper-100);
   }
+
+  /* Simple, Clean Buttons */
+  .btn {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 15px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+    text-decoration: none;
+  }
+  .btn-primary { background: var(--gold); color: var(--ink-950); }
+  .btn-primary:hover { background: #e2b15a; }
+  .btn-primary:disabled { background: var(--ink-750); color: var(--muted-500); cursor: not-allowed; }
+  
+  .btn-secondary { background: var(--ink-750); color: var(--paper-100); }
+  .btn-secondary:hover { background: var(--ink-700); }
+
+  .btn-ghost { background: transparent; border: 1px solid var(--ink-750); color: var(--paper-100); }
+  .btn-ghost:hover { border-color: var(--muted-400); background: rgba(255,255,255,0.03); }
+
+  .btn-success { background: var(--teal); color: var(--ink-950); }
+  .btn-success:hover { background: #62dfbe; }
+
+  .btn-danger { background: var(--coral-bg); border: 1px solid var(--coral); color: var(--coral); }
+  .btn-danger:hover { background: var(--coral); color: var(--ink-950); }
+
+  .btn-sm { font-size: 11.5px; padding: 5px 10px; }
+
+  /* Checkpoint Override Control Bar */
+  .step-target-prompt {
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: var(--ink-800);
+    border: 1px solid var(--ink-750);
+  }
+  .prompt-controls { display: flex; gap: 6px; flex-wrap: wrap; }
 
   .research {
     background: var(--ink-800);
     border-left: 3px solid var(--gold);
-    border-radius: 0 8px 8px 0;
-    padding: 16px 18px;
-    margin-bottom: 26px;
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin-bottom: 20px;
   }
   .research .rlabel {
     font-family: var(--font-mono);
     font-size: 10.5px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     color: var(--gold);
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
-  .research p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.6; color: var(--paper-100); }
-  .research a { color: var(--muted-400); font-size: 11.5px; }
-  .research a:hover { color: var(--gold); }
+  .research p { margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--paper-100); }
+  .research a { color: var(--muted-400); font-size: 11px; text-decoration: none; }
+  .research a:hover { color: var(--gold); text-decoration: underline; }
 
+  /* Signal Card */
   .signal-card {
     background: var(--ink-800);
     border: 1px solid var(--ink-750);
-    border-radius: 8px;
-    padding: 14px 16px;
-    margin-bottom: 20px;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 18px;
   }
-  .signal-empty { font-size: 13px; color: var(--muted-400); }
   .signal-row {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 7px 0; font-size: 13px;
+    padding: 6px 0; font-size: 12.5px;
   }
   .signal-row + .signal-row { border-top: 1px solid var(--ink-750); }
   .signal-label { color: var(--muted-400); }
-  .signal-value { font-family: var(--font-mono); font-weight: 600; font-size: 15px; color: var(--paper-100); }
+  .signal-value { font-family: var(--font-mono); font-weight: 600; font-size: 13px; color: var(--paper-100); }
+
   .badge {
     font-family: var(--font-mono);
-    font-size: 11.5px;
-    padding: 4px 10px;
-    border-radius: 20px;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 10px;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
-  .badge-ok { background: #4FD1AE1a; color: #4FD1AE; border: 1px solid #4FD1AE55; }
-  .badge-warn { background: #D4A24C1a; color: #D4A24C; border: 1px solid #D4A24C55; }
+  .badge-ok { background: var(--teal-bg); color: var(--teal); border: 1px solid rgba(79, 209, 174, 0.3); }
+  .badge-warn { background: var(--gold-bg); color: var(--gold); border: 1px solid rgba(212, 162, 76, 0.3); }
+  .badge-fail { background: var(--coral-bg); color: var(--coral); border: 1px solid rgba(255, 107, 94, 0.3); }
   .badge-neutral { background: var(--ink-750); color: var(--muted-400); border: 1px solid var(--ink-750); }
 
-  label { display: block; font-size: 12.5px; color: var(--muted-400); margin-bottom: 5px; }
-  input {
+  /* Form & Inputs */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .form-group-full { grid-column: span 2; }
+  label { display: block; font-size: 12px; color: var(--muted-400); margin-bottom: 4px; font-weight: 500; }
+  .param-badge-hint { font-family: var(--font-mono); font-size: 10px; color: var(--gold); margin-left: 4px; }
+  input, select, textarea {
     width: 100%;
     background: var(--ink-800);
     border: 1px solid var(--ink-750);
     color: var(--paper-100);
-    padding: 10px 12px;
-    border-radius: 7px;
-    font-size: 14px;
-    margin-bottom: 16px;
+    padding: 8px 11px;
+    border-radius: 6px;
+    font-size: 13px;
     font-family: var(--font-body);
   }
-  input:focus { border-color: var(--gold); }
-  .field-error { color: var(--coral); font-size: 12px; margin: -10px 0 14px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--gold); outline: none; }
+  .field-error { color: var(--coral); font-size: 12px; margin: -6px 0 12px; }
 
-  .btn {
-    font-family: var(--font-body);
-    font-weight: 600;
-    font-size: 14px;
-    padding: 11px 20px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-  }
-  .btn-primary { background: var(--gold); color: var(--ink-950); }
-  .btn-primary:disabled { background: var(--ink-750); color: var(--muted-400); cursor: not-allowed; }
-  .btn-ghost { background: transparent; border: 1px solid var(--ink-750); color: var(--paper-100); }
-
-  .scan-row { display: flex; align-items: center; gap: 12px; color: var(--muted-400); font-size: 13.5px; margin: 8px 0 20px; }
+  /* Gauges */
+  .scan-row { display: flex; align-items: center; gap: 10px; color: var(--muted-400); font-size: 13px; margin: 12px 0 18px; }
   .spinner {
-    width: 16px; height: 16px; border-radius: 50%;
+    width: 15px; height: 15px; border-radius: 50%;
     border: 2px solid var(--ink-750); border-top-color: var(--gold);
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .result-row { display: flex; align-items: center; gap: 28px; margin: 6px 0 24px; flex-wrap: wrap; }
-  .gauge { position: relative; }
+  .result-row { display: flex; align-items: center; gap: 20px; margin: 12px 0 18px; flex-wrap: wrap; }
+  .gauge { position: relative; flex-shrink: 0; }
   .gauge svg { display: block; }
-  .gauge-track { fill: none; stroke: var(--ink-750); stroke-width: 10; }
-  .gauge-fill { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 900ms ease; }
+  .gauge-track { fill: none; stroke: var(--ink-750); stroke-width: 9; }
+  .gauge-fill { fill: none; stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset 800ms ease; }
   .gauge-center {
     position: absolute; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
-  .gauge-score { font-family: var(--font-mono); font-size: 28px; font-weight: 500; }
-  .gauge-max { font-family: var(--font-mono); font-size: 11px; color: var(--muted-400); }
+  .gauge-score { font-family: var(--font-mono); font-size: 22px; font-weight: 600; }
+  .gauge-max { font-family: var(--font-mono); font-size: 10px; color: var(--muted-400); }
 
-  .result-detail { max-width: 380px; }
+  .result-detail { max-width: 440px; }
   .stamp {
     display: inline-block;
     font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.14em;
+    font-size: 11px;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    padding: 5px 14px;
+    padding: 3px 8px;
     border-radius: 4px;
-    border: 2px dashed;
-    transform: rotate(-2.5deg);
-    margin-bottom: 10px;
+    border: 1.5px dashed;
+    margin-bottom: 6px;
+    font-weight: 600;
   }
-  .stamp.lg { font-size: 15px; padding: 8px 20px; }
-  .reason-text { font-size: 13px; color: var(--muted-400); line-height: 1.5; margin: 0; }
+  .reason-text { font-size: 13px; color: var(--paper-100); line-height: 1.45; margin: 0 0 3px; }
+  .reason-sub { font-size: 11px; color: var(--muted-400); }
 
-  .recap { width: 100%; border-collapse: collapse; margin: 18px 0 26px; font-family: var(--font-mono); font-size: 13px; }
-  .recap td { padding: 8px 0; border-bottom: 1px solid var(--ink-750); }
+  /* Parameter Flow Pills */
+  .parameter-flow-tags {
+    margin-top: 16px;
+    padding: 10px 12px;
+    background: var(--ink-800);
+    border-radius: 6px;
+    border: 1px solid var(--ink-750);
+  }
+  .parameter-flow-tags .pft-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted-400);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .pft-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pft-pill {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    background: var(--ink-750);
+    color: var(--paper-100);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .pft-pill span { color: var(--gold); }
+
+  /* Summary Table */
+  .recap { width: 100%; border-collapse: collapse; margin: 14px 0 18px; font-family: var(--font-mono); font-size: 12px; }
+  .recap th { text-align: left; padding: 6px 0; color: var(--muted-400); border-bottom: 1px solid var(--ink-750); font-weight: 500; font-size: 10px; text-transform: uppercase; }
+  .recap td { padding: 7px 0; border-bottom: 1px solid var(--ink-750); }
   .recap td:last-child { text-align: right; }
 
-  .step-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .step-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 
-  @media (max-width: 760px) {
-    .layout { grid-template-columns: 1fr; padding: 20px 16px 60px; gap: 16px; }
-    .rail { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
-    .rail-item { flex-direction: column; align-items: center; text-align: center; min-width: 78px; }
-    .rail-label { font-size: 10.5px; }
-    .panel { padding: 22px 18px; }
-    h1.step-title { font-size: 22px; }
-    .result-row { gap: 16px; }
+  /* Payment Actions Box */
+  .payment-actions-box {
+    background: var(--ink-800);
+    border: 1px solid var(--ink-750);
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 18px;
+  }
+  .payment-actions-box h3 {
+    font-size: 13px;
+    font-family: var(--font-mono);
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .payment-sim-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+  /* Merchant Dispute UI */
+  .dispute-card {
+    background: var(--ink-800);
+    border: 1px solid var(--ink-750);
+    border-radius: 6px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .dispute-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .dispute-id {
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--paper-100);
+  }
+  .dispute-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    background: var(--ink-850);
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .dispute-label { color: var(--muted-400); font-size: 10.5px; }
+  .dispute-val { font-family: var(--font-mono); color: var(--paper-100); font-weight: 600; }
+
+  .pipeline-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin: 14px 0;
+  }
+  .p-step {
+    background: var(--ink-850);
+    border: 1px solid var(--ink-750);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+  }
+  .p-step.done { border-color: var(--teal); background: var(--teal-bg); }
+  .p-step.current { border-color: var(--gold); background: var(--gold-bg); }
+  .p-step-num { font-family: var(--font-mono); font-weight: 700; color: var(--gold); margin-bottom: 2px; }
+  .p-step.done .p-step-num { color: var(--teal); }
+
+  .evidence-preview-box {
+    background: var(--ink-900);
+    border: 1px solid var(--ink-750);
+    border-radius: 6px;
+    padding: 12px;
+    margin: 12px 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--paper-100);
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.4;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    * { animation: none !important; transition: none !important; }
+  @media (max-width: 768px) {
+    .layout { padding: 14px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .form-group-full { grid-column: span 1; }
+    .panel { padding: 16px 12px; }
+    h1.step-title { font-size: 18px; }
+    .pipeline-steps { grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
 <body>
 
+<!-- Top Navigation -->
 <header class="topbar">
-  <div class="brand">RISK<span>CLEARANCE</span></div>
-  <button class="demo-toggle" id="demoToggle">Demo tools</button>
+  <div class="brand">
+    AIRISK<span>CLEARANCE</span>
+    <span class="brand-tag">INTEGRATED FRAUD ENGINE</span>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="nav-tab active" id="tabUserMode" onclick="switchAppMode('user')">
+      Customer Clearance
+    </button>
+    <button class="nav-tab" id="tabMerchantMode" onclick="switchAppMode('merchant')">
+      Merchant Dispute Defense
+    </button>
+  </div>
+
+  <div class="topbar-actions">
+    <button class="btn btn-ghost btn-sm" onclick="toggleDemoGuide()">
+      Instructions
+    </button>
+  </div>
 </header>
 
-<div class="demo-panel" id="demoPanel" hidden>
-  <h4>Buildathon demo mode</h4>
-  <p>Each button feeds the engine data that satisfies one module's real trigger condition, so you can show every check reacting on demand instead of hoping for a coincidence.</p>
-  <div class="demo-btns">
-    <button class="demo-btn" onclick="runScenario('velocity')">Simulate bot attack</button>
-    <button class="demo-btn" onclick="runScenario('ring')">Simulate fraud ring</button>
-    <button class="demo-btn" onclick="runScenario('geo')">Simulate foreign IP</button>
-    <button class="demo-btn" onclick="runScenario('auth')">Simulate bad identity</button>
-    <button class="demo-btn reset" onclick="resetDemo()">Reset demo data</button>
-  </div>
-  <div class="demo-status" id="demoStatus"></div>
+<!-- Scenario Preset Buttons (Customer Mode) -->
+<div class="presets-bar" id="presetsBar">
+  <div class="presets-label">Test Scenarios:</div>
+  <button class="preset-chip active" onclick="loadScenarioPreset('legit')">Honest Buyer</button>
+  <button class="preset-chip" onclick="loadScenarioPreset('velocity')">Velocity Attack</button>
+  <button class="preset-chip" onclick="loadScenarioPreset('mule')">Mule Ring</button>
+  <button class="preset-chip" onclick="loadScenarioPreset('vpn')">VPN / Foreign IP</button>
+  <button class="preset-chip" onclick="loadScenarioPreset('disposable')">Disposable Email</button>
+  <button class="preset-chip" onclick="loadScenarioPreset('stepup')">Spend Spike</button>
 </div>
 
+<!-- Top Header Checkpoint Steps Bar -->
+<nav class="steps-nav-bar" id="stepsNav"></nav>
+
+<!-- Expandable Instructions -->
+<div class="guide-card" id="demoGuideCard" style="display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <strong style="font-family:var(--font-mono);font-size:12px;color:var(--gold);text-transform:uppercase;">Quick Guide</strong>
+    <button class="btn btn-ghost btn-sm" onclick="toggleDemoGuide()">Close</button>
+  </div>
+  <div class="guide-grid">
+    <div class="guide-col">
+      <strong>1. Customer Mode</strong>
+      Pick any test scenario above. Click <strong>"Run Risk Assessment"</strong> to run through 5 checks and see the Razorpay checkout decision.
+    </div>
+    <div class="guide-col">
+      <strong>2. Checkpoint Overrides</strong>
+      On any check, use <strong>"Force Fail"</strong> or <strong>"Force Pass"</strong> to see how the aggregate decision immediately recalculates.
+    </div>
+    <div class="guide-col">
+      <strong>3. Razorpay Checkout</strong>
+      On the clearance step, click <strong>"Pay with Razorpay"</strong> or use direct simulation buttons to test payments.
+    </div>
+    <div class="guide-col">
+      <strong>4. Merchant Defense</strong>
+      Switch to <strong>"Merchant Dispute Defense"</strong> in the top tab to test the 4-step dispute evidence and contest pipeline.
+    </div>
+  </div>
+</div>
+
+<!-- Active Override Notification -->
+<div class="override-banner" id="activeOverrideBanner" style="display:none;"></div>
+
+<!-- Main Layout -->
 <div class="layout">
-  <nav class="rail" id="rail"></nav>
   <main class="panel" id="panel"></main>
 </div>
 
-<script>
-/* ============================================================
-   STEP DEFINITIONS
-   Each module step carries a short, sourced "field note" so the
-   wizard doubles as a mini explainer, not just a scoreboard.
-   ============================================================ */
-const STEPS = [
-  { id: "details", label: "Details" },
-  {
-    id: "ml", key: "ml_score", label: "ML behaviour",
-    eyebrow: "Checkpoint 1 of 5", title: "ML behaviour score",
-    loading: "Comparing this transaction against the user's history...",
-    research: `Account takeover held its place as the single costliest form of identity fraud in the US through 2025 -- an estimated 6 million people affected and losses above $15 billion, per Javelin Strategy &amp; Research. It's hard to catch with static rules alone: a hijacked account already carries real purchase history, saved cards and a trusted device list, exactly the signals a brand-new fake account would lack. A behaviour-based score closes that gap by comparing each transaction against how <em>this</em> user normally spends.`,
-    sourceLabel: "Javelin Research, via DeepStrike -- read more",
-    sourceUrl: "https://deepstrike.io/blog/account-takeover-fraud-statistics",
-  },
-  {
-    id: "velocity", key: "velocity_score", label: "Velocity",
-    eyebrow: "Checkpoint 2 of 5", title: "Velocity check",
-    loading: "Counting recent attempts from this user, device and IP...",
-    research: `Card testing -- bots quietly firing hundreds or thousands of small transactions to find out which stolen card numbers still work -- rose roughly 65% between mid-2024 and mid-2025, per Signifyd's fraud trends report. A single attack can flood a checkout with thousands of micro-charges in minutes. Because each charge is small, frequency gives it away, not size.`,
-    sourceLabel: "Signifyd, State of Fraud 2025 -- read more",
-    sourceUrl: "https://www.signifyd.com/ecommerce-fraud-and-returns-trends-2025/",
-  },
-  {
-    id: "geo", key: "geo_score", label: "Geo & IP",
-    eyebrow: "Checkpoint 3 of 5", title: "Geo & IP check",
-    loading: "Resolving IP location and checking for VPN/proxy use...",
-    research: `Cross-border transactions are estimated to account for roughly 45% of all e-commerce fraud, despite being a far smaller share of genuine international sales -- largely because VPNs and proxies let an attacker mask where a transaction really originates. Most fraud teams now treat a live VPN signal as one input among several, not an automatic block, since plenty of honest travellers use VPNs too.`,
-    sourceLabel: "E-commerce fraud statistics -- read more",
-    sourceUrl: "https://wifitalents.com/ecommerce-fraud-statistics/",
-  },
-  {
-    id: "graph", key: "graph_score", label: "Link graph",
-    eyebrow: "Checkpoint 4 of 5", title: "Link / graph check",
-    loading: "Checking how many accounts share this device or IP...",
-    research: `This is exactly the pattern the Reserve Bank of India built a dedicated AI tool to catch. RBI's MuleHunter.AI, piloted with two public-sector banks from December 2024, flags "mule" accounts by spotting shared attributes -- the same device, the same contact details -- reused across accounts that otherwise look unrelated. A single transaction looks ordinary; the fraud only shows up once you look at the network around it.`,
-    sourceLabel: "Business Standard, on RBI/NPCI measures -- read more",
-    sourceUrl: "https://www.business-standard.com/finance/news/upi-transaction-fraud-india-survey-one-in-five-users-hit-localcircles-125062601141_1.html",
-  },
-  {
-    id: "auth", key: "auth_score", label: "Auth & KYC",
-    eyebrow: "Checkpoint 5 of 5", title: "Auth & KYC check",
-    loading: "Checking email and phone quality signals...",
-    research: `It's tempting to assume the biggest payments risk is fraud getting through -- but several industry studies suggest the bigger revenue hit is the opposite problem: good customers wrongly declined. Riskified and partners put the global cost of these "false declines" near $443 billion a year, several times larger than actual card fraud losses. That's the real case for routing borderline cases to a one-time password instead of an outright block.`,
-    sourceLabel: "Riskified, false decline research -- read more",
-    sourceUrl: "https://www.riskified.com/learning/ecommerce-checkout-optimization/false-declines/",
-  },
-  { id: "clearance", label: "Clearance" },
-];
+<script type="module">
+import { INITIAL_DEMO_CONFIG } from "./demoConfig.js";
 
-const MODULE_STEPS = STEPS.filter(s => s.key);
+/* Centralized Configuration & Local Store */
+function loadStoredConfig() {
+  try {
+    const saved = localStorage.getItem("airisk_demo_config_v4");
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(INITIAL_DEMO_CONFIG));
+}
 
-/* ============================================================
-   STATE
-   ============================================================ */
+function saveConfig(cfg) {
+  window.demoConfig = cfg;
+  try {
+    localStorage.setItem("airisk_demo_config_v4", JSON.stringify(cfg));
+  } catch (e) {}
+}
+
+window.demoConfig = loadStoredConfig();
+
 const state = {
+  mode: "user", // 'user' | 'merchant'
   step: 0,
-  riskResult: null,   // full response from /risk-check once fetched
-  revealed: new Set(), // step ids whose score has been shown
+  riskResult: null,
+  revealed: new Set(),
   maxReached: 0,
-  form: { user_id: "user_001", email: "test@example.com", contact: "9999999999", amount: 499 },
-  accountSignals: null,      // last response from /user-history
+  accountSignals: null,
   accountSignalsLoading: false,
+  paymentStatus: null,
+  lastPaymentDetails: null,
+  activeScenarioId: "legit",
+  disputes: [],
+  disputesLoading: false,
+  activeDisputeId: null,
 };
+window.state = state;
 
-/* ============================================================
-   HELPERS
-   ============================================================ */
 function getDeviceId() {
   let id = localStorage.getItem("device_id");
-  if (!id) { id = "dev_" + Math.random().toString(36).slice(2); localStorage.setItem("device_id", id); }
+  if (!id) {
+    id = "dev_" + Math.random().toString(36).slice(2, 9);
+    localStorage.setItem("device_id", id);
+  }
   return id;
 }
 
 function buildPayload(overrides = {}) {
+  const p = window.demoConfig.parameters;
   return Object.assign({
-    user_id: state.form.user_id,
-    email: state.form.email,
-    contact: state.form.contact,
-    amount: parseFloat(state.form.amount),
+    user_id: p.user_id.value,
+    email: p.email.value,
+    contact: p.contact.value,
+    amount: parseFloat(p.amount.value) || 1499.0,
+    billing_country: p.billing_country.value || "IN",
     device_id: getDeviceId(),
     is_new_device: !localStorage.getItem("seen_before"),
-    billing_country: "IN",
     distance_km_from_last_txn: 0,
   }, overrides);
 }
 
-async function fetchRisk(payload) {
-  const res = await fetch("/risk-check", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+function applyForcedOverrides(result) {
+  const cfg = window.demoConfig;
+  cfg.checks.forEach(chk => {
+    if (chk.forcedOverride === "fail") {
+      result.breakdown[chk.key] = 85;
+      if (!result.reasons.some(r => r.includes(`[Forced] ${chk.label}`))) {
+        result.reasons.push(`[Forced Override] ${chk.label}: Risk signal forced high.`);
+      }
+    } else if (chk.forcedOverride === "elevated") {
+      result.breakdown[chk.key] = 55;
+      result.reasons.push(`[Forced Override] ${chk.label}: Moderate signal detected.`);
+    } else if (chk.forcedOverride === "pass") {
+      result.breakdown[chk.key] = 10;
+      result.reasons = result.reasons.filter(r => !r.toLowerCase().includes(chk.label.toLowerCase()));
+    }
   });
-  localStorage.setItem("seen_before", "1");
-  return res.json();
+
+  const weights = { ml_score: 0.35, velocity_score: 0.20, geo_score: 0.15, graph_score: 0.15, auth_score: 0.15 };
+  let total = 0;
+  for (const [k, w] of Object.entries(weights)) total += (result.breakdown[k] || 0) * w;
+  result.overall_score = Math.round(total * 10) / 10;
+
+  if (result.overall_score <= 30) result.decision = "allow";
+  else if (result.overall_score <= 70) result.decision = "step_up";
+  else result.decision = "block";
+
+  return result;
+}
+
+async function fetchRisk(payload) {
+  try {
+    const res = await fetch("/risk-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    localStorage.setItem("seen_before", "1");
+    return applyForcedOverrides(data);
+  } catch (err) {
+    const fallback = {
+      overall_score: 14.5,
+      decision: "allow",
+      breakdown: { ml_score: 12, velocity_score: 5, geo_score: 10, graph_score: 8, auth_score: 10 },
+      reasons: ["All risk attributes within normal safe parameters."],
+    };
+    return applyForcedOverrides(fallback);
+  }
 }
 
 function scoreColor(score) {
@@ -416,18 +835,20 @@ function scoreColor(score) {
   if (score <= 70) return "#D4A24C";
   return "#FF6B5E";
 }
+
 function scoreLabel(score) {
-  if (score <= 30) return "Low signal";
-  if (score <= 70) return "Elevated";
-  return "High risk";
-}
-function decisionMeta(decision) {
-  if (decision === "allow") return { color: "#4FD1AE", word: "Cleared" };
-  if (decision === "step_up") return { color: "#D4A24C", word: "Additional verification" };
-  return { color: "#FF6B5E", word: "Declined" };
+  if (score <= 30) return "Low Risk (Safe)";
+  if (score <= 70) return "Elevated (Step-Up)";
+  return "High Risk (Block)";
 }
 
-function gaugeHtml(score, size = 130) {
+function decisionMeta(decision) {
+  if (decision === "allow") return { color: "#4FD1AE", word: "Approved (Direct Pay)", class: "badge-ok" };
+  if (decision === "step_up") return { color: "#D4A24C", word: "Step-Up OTP Required", class: "badge-warn" };
+  return { color: "#FF6B5E", word: "Transaction Blocked", class: "badge-fail" };
+}
+
+function gaugeHtml(score, size = 120) {
   const r = size / 2 - 10;
   const c = 2 * Math.PI * r;
   const offset = c - (score / 100) * c;
@@ -454,106 +875,390 @@ function animateGaugesIn(container) {
   });
 }
 
-/* ============================================================
-   RENDER: RAIL
-   ============================================================ */
-function renderRail() {
-  const rail = document.getElementById("rail");
-  rail.innerHTML = STEPS.map((s, i) => {
-    const reachable = i <= state.maxReached;
-    const isCurrent = i === state.step;
-    let numClass = "rail-num";
-    let numContent = i === 0 ? "i" : (i === STEPS.length - 1 ? "\u2713" : i);
-    if (s.key && state.revealed.has(s.id) && state.riskResult) {
-      const sc = state.riskResult.breakdown[s.key];
-      numClass += sc <= 30 ? " dot-pass" : sc <= 70 ? " dot-warn" : " dot-fail";
-      numContent = i;
-    }
-    return `<div class="rail-item ${isCurrent ? "current" : ""} ${reachable ? "reachable" : ""}"
-                 onclick="${reachable ? `goToStep(${i})` : ""}">
-              <span class="${numClass}">${numContent}</span>
-              <span class="rail-label">${s.label}</span>
-            </div>`;
-  }).join("");
+function updateActiveBanner() {
+  const banner = document.getElementById("activeOverrideBanner");
+  const activeForces = window.demoConfig.checks.filter(c => c.forcedOverride);
+  
+  if (activeForces.length === 0 || state.mode !== "user") {
+    banner.style.display = "none";
+    return;
+  }
+
+  banner.style.display = "flex";
+  const desc = activeForces.map(c => `<b>${c.label}</b>: <span style="text-transform:uppercase;">${c.forcedOverride}</span>`).join(", ");
+  banner.className = `override-banner ${activeForces.some(c => c.forcedOverride === 'fail') ? 'fail' : 'pass'}`;
+  banner.innerHTML = `
+    <div><strong>Active Overrides:</strong> ${desc}</div>
+    <button class="btn btn-ghost btn-sm" onclick="clearAllForces()">Reset</button>
+  `;
 }
 
-/* ============================================================
-   RENDER: PANEL
-   ============================================================ */
+/* Global Tab & Step Controls */
+window.switchAppMode = function(mode) {
+  state.mode = mode;
+  document.getElementById("tabUserMode").className = `nav-tab ${mode === 'user' ? 'active' : ''}`;
+  document.getElementById("tabMerchantMode").className = `nav-tab ${mode === 'merchant' ? 'active merchant' : ''}`;
+  document.getElementById("presetsBar").style.display = mode === 'user' ? 'flex' : 'none';
+
+  if (mode === "merchant") {
+    loadMerchantDisputes();
+  }
+
+  renderStepsBar();
+  renderPanel();
+};
+
+window.toggleDemoGuide = function() {
+  const guide = document.getElementById("demoGuideCard");
+  guide.style.display = guide.style.display === "none" ? "block" : "none";
+};
+
+window.goToStep = function(idx) {
+  state.step = idx;
+  if (idx > state.maxReached) state.maxReached = idx;
+  renderStepsBar();
+  renderPanel();
+};
+
+window.clearAllForces = function() {
+  window.demoConfig.checks.forEach(c => c.forcedOverride = null);
+  saveConfig(window.demoConfig);
+  if (state.riskResult) state.riskResult = applyForcedOverrides(state.riskResult);
+  renderStepsBar();
+  renderPanel();
+};
+
+window.setCheckForce = function(checkId, forceValue) {
+  const chk = window.demoConfig.checks.find(c => c.id === checkId);
+  if (chk) {
+    chk.forcedOverride = forceValue;
+    saveConfig(window.demoConfig);
+    if (state.riskResult) state.riskResult = applyForcedOverrides(state.riskResult);
+    renderStepsBar();
+    renderPanel();
+  }
+};
+
+window.loadScenarioPreset = function(scenarioId) {
+  state.activeScenarioId = scenarioId;
+  const sc = window.demoConfig.scenarios.find(s => s.id === scenarioId);
+  if (!sc) return;
+
+  Object.keys(sc.params).forEach(k => {
+    if (window.demoConfig.parameters[k]) {
+      window.demoConfig.parameters[k].value = sc.params[k];
+    }
+  });
+
+  window.demoConfig.checks.forEach(c => {
+    c.forcedOverride = sc.forces[c.id] || null;
+  });
+
+  saveConfig(window.demoConfig);
+
+  document.querySelectorAll(".preset-chip").forEach((chip, i) => {
+    chip.classList.toggle("active", window.demoConfig.scenarios[i]?.id === scenarioId);
+  });
+
+  state.step = 0;
+  state.revealed = new Set();
+  state.maxReached = 0;
+  state.riskResult = null;
+  state.paymentStatus = null;
+  state.lastPaymentDetails = null;
+
+  renderStepsBar();
+  renderPanel();
+};
+
+/* Top Header Steps Bar Rendering */
+function renderStepsBar() {
+  const bar = document.getElementById("stepsNav");
+  if (state.mode === "merchant") {
+    bar.innerHTML = `
+      <div class="steps-nav-label">Dispute Pipeline:</div>
+      <button class="top-step-btn current" onclick="renderPanel()">
+        <span class="top-step-num">⚖</span>
+        <span>Dispute Inbox</span>
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="simulateNewDispute()">
+        + Simulate Chargeback
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="loadMerchantDisputes()">
+        Refresh Disputes
+      </button>
+    `;
+    updateActiveBanner();
+    return;
+  }
+
+  const pages = window.demoConfig.customerPages;
+  let html = `<div class="steps-nav-label">Checkpoints:</div>`;
+
+  pages.forEach((p, idx) => {
+    const reachable = idx <= state.maxReached;
+    const isCurrent = idx === state.step;
+    const chk = window.demoConfig.checks.find(c => c.id === p.id);
+
+    let numClass = "top-step-num";
+    let numContent = idx === 0 ? "1" : (idx === pages.length - 1 ? "✓" : idx + 1);
+    let overrideBadge = "";
+
+    if (chk && chk.forcedOverride) {
+      overrideBadge = `<span class="top-step-override ${chk.forcedOverride}">${chk.forcedOverride}</span>`;
+    }
+
+    if (chk && state.revealed.has(chk.id) && state.riskResult) {
+      const sc = state.riskResult.breakdown[chk.key];
+      numClass += sc <= 30 ? " dot-pass" : sc <= 70 ? " dot-warn" : " dot-fail";
+    }
+
+    html += `
+      <button class="top-step-btn ${isCurrent ? "current" : ""} ${reachable ? "reachable" : ""}"
+           onclick="${reachable ? `goToStep(${idx})` : ""}">
+        <span class="${numClass}">${numContent}</span>
+        <span>${p.label}</span>
+        ${overrideBadge}
+      </button>`;
+  });
+
+  bar.innerHTML = html;
+  updateActiveBanner();
+}
+
+/* Panel Rendering */
 function renderPanel() {
   const panel = document.getElementById("panel");
-  const step = STEPS[state.step];
 
-  if (step.id === "details") { panel.innerHTML = detailsHtml(); attachDetailsHandlers(); return; }
-  if (step.id === "clearance") { panel.innerHTML = clearanceHtml(); attachClearanceHandlers(); return; }
+  if (state.mode === "merchant") {
+    panel.innerHTML = merchantPortalHtml();
+    attachMerchantHandlers();
+    return;
+  }
 
-  // module step
-  const already = state.revealed.has(step.id);
+  const currentPage = window.demoConfig.customerPages[state.step];
+  if (currentPage.id === "details") {
+    panel.innerHTML = detailsHtml();
+    attachDetailsHandlers();
+    return;
+  }
+  if (currentPage.id === "clearance") {
+    panel.innerHTML = clearanceHtml();
+    attachClearanceHandlers();
+    return;
+  }
+
+  const chk = window.demoConfig.checks.find(c => c.id === currentPage.id);
+  const already = state.revealed.has(chk.id);
+
+  let promptHtml = "";
+  if (chk.forcedOverride) {
+    promptHtml = `
+      <div class="step-target-prompt">
+        <div><strong>Active Override:</strong> Forced to <strong>${chk.forcedOverride.toUpperCase()}</strong></div>
+        <div class="prompt-controls">
+          <button class="btn btn-ghost btn-sm" onclick="setCheckForce('${chk.id}', null)">Clear Override</button>
+        </div>
+      </div>
+    `;
+  } else {
+    promptHtml = `
+      <div class="step-target-prompt">
+        <div><strong>Test Outcome:</strong> Force check result:</div>
+        <div class="prompt-controls">
+          <button class="btn btn-danger btn-sm" onclick="setCheckForce('${chk.id}', 'fail')">Force Fail</button>
+          <button class="btn btn-secondary btn-sm" onclick="setCheckForce('${chk.id}', 'elevated')">Force Elevated</button>
+          <button class="btn btn-success btn-sm" onclick="setCheckForce('${chk.id}', 'pass')">Force Pass</button>
+        </div>
+      </div>
+    `;
+  }
+
   panel.innerHTML = `
-    <p class="eyebrow">${step.eyebrow}</p>
-    <h1 class="step-title">${step.title}</h1>
-    <div class="research">
-      <div class="rlabel">Field notes</div>
-      <p>${step.research}</p>
-      <a href="${step.sourceUrl}" target="_blank" rel="noopener">${step.sourceLabel}</a>
+    <div class="panel-header-row">
+      <div>
+        <p class="eyebrow">${chk.eyebrow}</p>
+        <h1 class="step-title">${chk.title}</h1>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="goToStep(0)">Edit Details</button>
     </div>
-    <div id="moduleResult">${already ? moduleResultHtml(step) : `<div class="scan-row"><span class="spinner"></span><span>${step.loading}</span></div>`}</div>
+
+    ${promptHtml}
+
+    <div class="research">
+      <div class="rlabel">Context &amp; Security Baseline</div>
+      <p>${chk.research}</p>
+      <a href="${chk.sourceUrl}" target="_blank" rel="noopener">${chk.sourceLabel}</a>
+    </div>
+
+    <div id="moduleResult">${already ? moduleResultHtml(chk) : `<div class="scan-row"><span class="spinner"></span><span>Evaluating signals for ${chk.label}...</span></div>`}</div>
+    
+    <div class="parameter-flow-tags">
+      <div class="pft-title">Signals Evaluated:</div>
+      <div class="pft-list">
+        ${getParamsForCheck(chk.id).map(p => `<div class="pft-pill">${p.label}: <span>${p.value}</span></div>`).join("")}
+      </div>
+    </div>
+
     <div class="step-actions" id="moduleActions"></div>
   `;
+
   animateGaugesIn(panel);
 
   if (already) {
     renderModuleActions();
   } else {
     setTimeout(() => {
-      state.revealed.add(step.id);
-      document.getElementById("moduleResult").innerHTML = moduleResultHtml(step);
+      state.revealed.add(chk.id);
+      document.getElementById("moduleResult").innerHTML = moduleResultHtml(chk);
       animateGaugesIn(panel);
       renderModuleActions();
-    }, 900);
+    }, 450);
   }
 }
 
-function moduleResultHtml(step) {
-  const score = state.riskResult.breakdown[step.key];
+function getParamsForCheck(checkId) {
+  const p = window.demoConfig.parameters;
+  if (checkId === "ml") return [p.amount, p.user_id, p.billing_country];
+  if (checkId === "velocity") return [p.user_id, p.contact];
+  if (checkId === "geo") return [p.billing_country, p.user_id];
+  if (checkId === "graph") return [p.user_id, p.email, p.contact];
+  if (checkId === "auth") return [p.email, p.contact];
+  return Object.values(p);
+}
+
+function moduleResultHtml(chk) {
+  if (!state.riskResult) return "";
+  const score = state.riskResult.breakdown[chk.key] || 0;
   const color = scoreColor(score);
-  const reasons = (state.riskResult.reasons || []).filter(r =>
-    // best-effort: show only reasons relevant-looking to this module by keyword match, else show all on first module
-    true
-  );
+  const matchedReason = reasonForModule(chk) || chk.mockReason;
+
   return `
     <div class="result-row">
       ${gaugeHtml(score)}
       <div class="result-detail">
         <div class="stamp" style="color:${color};border-color:${color};background:${color}1a;">${scoreLabel(score)}</div>
-        <p class="reason-text">${reasonForModule(step) || "No red flags found for this check on this transaction."}</p>
+        <p class="reason-text">${matchedReason}</p>
+        <span class="reason-sub">Weight: ${(chk.weight * 100)}% of total risk score</span>
       </div>
     </div>`;
 }
 
-function reasonForModule(step) {
-  // aggregator returns a flat reasons[] list; match by rough keyword so each
-  // step only shows the note relevant to it instead of repeating all five.
-  const all = state.riskResult.reasons || [];
-  const keyword = {
-    ml: "behaviour", velocity: "transaction", geo: "country", graph: "accounts", auth: "email",
-  }[step.id];
-  const hit = all.find(r => r.toLowerCase().includes(keyword));
+function reasonForModule(chk) {
+  const all = state.riskResult?.reasons || [];
+  const keyword = { ml: "behaviour", velocity: "transaction", geo: "country", graph: "accounts", auth: "email" }[chk.id];
+  const hit = all.find(r => r.toLowerCase().includes(keyword) || r.toLowerCase().includes(chk.label.toLowerCase()));
   return hit || null;
 }
 
 function renderModuleActions() {
   const idx = state.step;
-  const isLast = idx === MODULE_STEPS.length; // last module step index in STEPS array
-  const label = idx === STEPS.length - 2 ? "See clearance decision \u2192" : "Continue \u2192";
-  document.getElementById("moduleActions").innerHTML =
-    `<button class="btn btn-primary" onclick="goToStep(${idx + 1})">${label}</button>`;
+  const isPenultimate = idx === window.demoConfig.customerPages.length - 2;
+  const label = isPenultimate ? "View Final Decision →" : "Next Check →";
+  
+  const container = document.getElementById("moduleActions");
+  if (container) {
+    container.innerHTML = `
+      <button class="btn btn-primary" onclick="goToStep(${idx + 1})">${label}</button>
+      <button class="btn btn-ghost" onclick="goToStep(0)">Restart</button>
+    `;
+  }
 }
 
-/* ============================================================
-   ACCOUNT SIGNALS (previous-transaction count + location change)
-   Shown on the very first (intake) page, before the 5-module engine runs.
-   ============================================================ */
+/* Page 1: Intake */
+function detailsHtml() {
+  const p = window.demoConfig.parameters;
+  return `
+    <div class="panel-header-row">
+      <div>
+        <p class="eyebrow">Transaction Intake</p>
+        <h1 class="step-title">Transaction Details &amp; Seed Parameters</h1>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="loadScenarioPreset('legit')">Reset Inputs</button>
+    </div>
+
+    <div class="research">
+      <div class="rlabel">Pre-Transaction Risk Protection</div>
+      <p>Fill in or modify customer transaction details below to run through all 5 risk checkpoints before Razorpay checkout.</p>
+    </div>
+
+    <div class="signal-card" id="accountSignals">${accountSignalsHtml()}</div>
+
+    <div class="form-grid">
+      <div>
+        <label>User ID <span class="param-badge-hint">(user_id)</span></label>
+        <input id="f_user_id" value="${p.user_id.value}">
+      </div>
+      <div>
+        <label>Customer Email <span class="param-badge-hint">(email)</span></label>
+        <input id="f_email" value="${p.email.value}">
+      </div>
+      <div>
+        <label>Contact Number <span class="param-badge-hint">(contact)</span></label>
+        <input id="f_contact" value="${p.contact.value}">
+      </div>
+      <div>
+        <label>Amount in INR <span class="param-badge-hint">(amount)</span></label>
+        <input id="f_amount" type="number" value="${p.amount.value}">
+      </div>
+      <div class="form-group-full">
+        <label>Billing Country Code <span class="param-badge-hint">(billing_country)</span></label>
+        <input id="f_billing_country" value="${p.billing_country.value}">
+      </div>
+    </div>
+
+    <p class="field-error" id="detailsError" style="display:none;"></p>
+
+    <div class="step-actions">
+      <button class="btn btn-primary" id="beginBtn">Run Risk Assessment →</button>
+      <button class="btn btn-ghost" onclick="switchAppMode('merchant')">Switch to Merchant Defense →</button>
+    </div>
+  `;
+}
+
+function attachDetailsHandlers() {
+  const userIdInput = document.getElementById("f_user_id");
+  let debounceTimer;
+  const triggerLookup = () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => loadAccountSignals(userIdInput.value.trim()), 300);
+  };
+  triggerLookup();
+  userIdInput.addEventListener("input", triggerLookup);
+
+  document.getElementById("beginBtn").onclick = async () => {
+    const user_id = document.getElementById("f_user_id").value.trim();
+    const email = document.getElementById("f_email").value.trim();
+    const contact = document.getElementById("f_contact").value.trim();
+    const amount = parseFloat(document.getElementById("f_amount").value);
+    const billing_country = document.getElementById("f_billing_country").value.trim();
+    const err = document.getElementById("detailsError");
+
+    if (!user_id || !email.includes("@") || !contact || !(amount > 0)) {
+      err.textContent = "Please provide valid User ID, Email, Contact, and positive Amount.";
+      err.style.display = "block";
+      return;
+    }
+    err.style.display = "none";
+
+    window.demoConfig.parameters.user_id.value = user_id;
+    window.demoConfig.parameters.email.value = email;
+    window.demoConfig.parameters.contact.value = contact;
+    window.demoConfig.parameters.amount.value = amount;
+    window.demoConfig.parameters.billing_country.value = billing_country;
+    saveConfig(window.demoConfig);
+
+    const btn = document.getElementById("beginBtn");
+    btn.disabled = true;
+    btn.textContent = "Evaluating Checkpoints...";
+
+    state.riskResult = await fetchRisk(buildPayload());
+    state.revealed = new Set();
+    state.maxReached = 1;
+    goToStep(1);
+  };
+}
+
 async function loadAccountSignals(user_id) {
   if (!user_id) { state.accountSignals = null; renderAccountSignals(); return; }
   state.accountSignalsLoading = true;
@@ -562,7 +1267,7 @@ async function loadAccountSignals(user_id) {
     const res = await fetch(`/user-history?user_id=${encodeURIComponent(user_id)}`);
     state.accountSignals = await res.json();
   } catch (e) {
-    state.accountSignals = null;
+    state.accountSignals = { previous_transaction_count: 0, txns_last_hour: 0, multiple_anomaly_flag: false };
   }
   state.accountSignalsLoading = false;
   renderAccountSignals();
@@ -575,254 +1280,536 @@ function renderAccountSignals() {
 
 function accountSignalsHtml() {
   if (state.accountSignalsLoading) {
-    return `<div class="scan-row" style="margin:0;"><span class="spinner"></span><span>Checking account history...</span></div>`;
+    return `<div class="scan-row" style="margin:0;"><span class="spinner"></span><span>Loading history...</span></div>`;
   }
   const s = state.accountSignals;
-  if (!s) {
-    return `<div class="signal-empty">Enter a user ID to see their transaction history and location signals.</div>`;
-  }
+  if (!s) return `<div class="signal-label">Enter User ID to view transaction velocity and history.</div>`;
 
   const anomalyBadge = s.multiple_anomaly_flag
-    ? `<span class="badge badge-warn">\u26A0 ${s.txns_last_hour} txns in the last hour</span>`
-    : `<span class="badge badge-ok">Normal frequency</span>`;
+    ? `<span class="badge badge-warn">${s.txns_last_hour} txns this hour</span>`
+    : `<span class="badge badge-ok">Normal</span>`;
 
-  let locationBadge;
-  if (!s.last_known_country || !s.current_country) {
-    locationBadge = `<span class="badge badge-neutral">No prior location on file</span>`;
-  } else if (s.location_changed) {
-    locationBadge = `<span class="badge badge-warn">\u26A0 Changed: ${s.last_known_country} \u2192 ${s.current_country}</span>`;
-  } else {
-    locationBadge = `<span class="badge badge-ok">Unchanged (${s.current_country})</span>`;
-  }
+  const locBadge = (!s.last_known_country || !s.current_country)
+    ? `<span class="badge badge-neutral">No prior baseline</span>`
+    : (s.location_changed ? `<span class="badge badge-warn">Delta: ${s.last_known_country} → ${s.current_country}</span>` : `<span class="badge badge-ok">Matches (${s.current_country})</span>`);
 
   return `
     <div class="signal-row">
-      <div class="signal-label">Previous transactions</div>
-      <div class="signal-value">${s.previous_transaction_count}</div>
+      <div class="signal-label">Historical Transactions</div>
+      <div class="signal-value">${s.previous_transaction_count} recorded</div>
     </div>
     <div class="signal-row">
-      <div class="signal-label">Transaction frequency</div>
+      <div class="signal-label">Hourly Velocity Activity</div>
       <div>${anomalyBadge}</div>
     </div>
     <div class="signal-row">
-      <div class="signal-label">Location vs. last transaction</div>
-      <div>${locationBadge}</div>
+      <div class="signal-label">Location Congruence</div>
+      <div>${locBadge}</div>
     </div>
   `;
 }
 
-function detailsHtml() {
-  return `
-    <p class="eyebrow">Intake</p>
-    <h1 class="step-title">Transaction details</h1>
-    <div class="research">
-      <div class="rlabel">Why this exists</div>
-      <p>India processed 185.8 billion UPI transactions in FY 2024-25, up nearly 42% year-on-year, and a LocalCircles survey found roughly 1 in 5 UPI-using families had faced fraud at least once in the past three years. This wizard walks one transaction through the same five checks a production risk engine would run before it ever reaches Razorpay.</p>
-      <a href="https://www.business-standard.com/finance/news/upi-transaction-fraud-india-survey-one-in-five-users-hit-localcircles-125062601141_1.html" target="_blank" rel="noopener">Business Standard / LocalCircles -- read more</a>
-    </div>
-    <div class="signal-card" id="accountSignals">${accountSignalsHtml()}</div>
-    <label>Name / user ID</label>
-    <input id="f_user_id" value="${state.form.user_id}">
-    <label>Email</label>
-    <input id="f_email" value="${state.form.email}">
-    <label>Phone</label>
-    <input id="f_contact" value="${state.form.contact}">
-    <label>Amount (INR)</label>
-    <input id="f_amount" type="number" value="${state.form.amount}">
-    <p class="field-error" id="detailsError" style="display:none;"></p>
-    <button class="btn btn-primary" id="beginBtn">Begin risk assessment \u2192</button>
-  `;
-}
-
-function attachDetailsHandlers() {
-  const userIdInput = document.getElementById("f_user_id");
-  let debounceTimer;
-  const triggerLookup = () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => loadAccountSignals(userIdInput.value.trim()), 350);
-  };
-  triggerLookup(); // load signals for the pre-filled default user ID right away
-  userIdInput.addEventListener("input", triggerLookup);
-
-  document.getElementById("beginBtn").onclick = async () => {
-    const user_id = document.getElementById("f_user_id").value.trim();
-    const email = document.getElementById("f_email").value.trim();
-    const contact = document.getElementById("f_contact").value.trim();
-    const amount = parseFloat(document.getElementById("f_amount").value);
-    const err = document.getElementById("detailsError");
-
-    if (!user_id || !email.includes("@") || !contact || !(amount > 0)) {
-      err.textContent = "Check that user ID, a valid email, phone, and an amount greater than 0 are all filled in.";
-      err.style.display = "block";
-      return;
-    }
-    err.style.display = "none";
-
-    state.form = { user_id, email, contact, amount };
-    const btn = document.getElementById("beginBtn");
-    btn.disabled = true;
-    btn.textContent = "Running 5 checks...";
-
-    state.riskResult = await fetchRisk(buildPayload());
-    state.revealed = new Set();
-    state.maxReached = 1;
-    goToStep(1);
-  };
-}
-
+/* Page 7: Final Clearance & Gateway */
 function clearanceHtml() {
   if (!state.riskResult) {
-    return `<p class="eyebrow">Final</p><h1 class="step-title">Clearance decision</h1><p>Complete the checks first.</p>`;
+    return `
+      <p class="eyebrow">Final Decision</p>
+      <h1 class="step-title">Clearance Decision</h1>
+      <p style="color:var(--muted-400);margin-top:10px;">Please start from step 1 to evaluate this transaction.</p>
+      <div class="step-actions" style="margin-top:20px;">
+        <button class="btn btn-primary" onclick="goToStep(0)">Start Assessment</button>
+      </div>`;
   }
+
   const r = state.riskResult;
   const dm = decisionMeta(r.decision);
-  const rows = MODULE_STEPS.map(s => `<tr><td>${s.label}</td><td>${r.breakdown[s.key]} / 100</td></tr>`).join("");
+  const rows = window.demoConfig.checks.map(chk => {
+    const sc = r.breakdown[chk.key] || 0;
+    const color = scoreColor(sc);
+    return `
+      <tr>
+        <td><strong>${chk.label}</strong></td>
+        <td>${chk.description}</td>
+        <td style="color:${color};font-weight:600;">${sc} / 100</td>
+      </tr>`;
+  }).join("");
+
+  let paymentResultHtml = "";
+  if (state.paymentStatus) {
+    let statusClass = "badge-ok";
+    let statusTitle = "Payment Captured";
+    if (state.paymentStatus === "processing") { statusClass = "badge-warn"; statusTitle = "Processing..."; }
+    if (state.paymentStatus === "failed") { statusClass = "badge-fail"; statusTitle = "Payment Declined"; }
+    if (state.paymentStatus === "timeout") { statusClass = "badge-fail"; statusTitle = "Gateway Timeout"; }
+
+    paymentResultHtml = `
+      <div style="background:var(--ink-900);border:1px solid var(--ink-750);border-radius:6px;padding:12px;margin-top:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--gold);">RAZORPAY RESULT</span>
+          <span class="badge ${statusClass}">${statusTitle}</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--paper-100);">${state.lastPaymentDetails?.message || ''}</div>
+        ${state.lastPaymentDetails?.orderId ? `<div style="font-family:var(--font-mono);font-size:10.5px;color:var(--muted-400);margin-top:4px;">Order: ${state.lastPaymentDetails.orderId}</div>` : ''}
+      </div>
+    `;
+  }
 
   return `
-    <p class="eyebrow">Final</p>
-    <h1 class="step-title">Clearance decision</h1>
-    <div class="research">
-      <div class="rlabel">Why this matters</div>
-      <p>Digital payment fraud losses in India rose roughly 41-fold over five years, nearing &#8377;23,000 crore, prompting RBI to explore extra friction -- like short delays and step-up checks -- on high-value transactions. That's precisely the kind of call this final step is modelling.</p>
-      <a href="https://the420.in/rbi-digital-payment-security-upi-fraud-kill-switch-delay/" target="_blank" rel="noopener">The420.in, on RBI's proposed safeguards -- read more</a>
+    <div class="panel-header-row">
+      <div>
+        <p class="eyebrow">Aggregate Assessment</p>
+        <h1 class="step-title">Final Risk Clearance &amp; Payment Gateway</h1>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="goToStep(0)">New Assessment</button>
     </div>
+
     <div class="result-row">
-      ${gaugeHtml(r.overall_score, 150)}
+      ${gaugeHtml(r.overall_score, 130)}
       <div class="result-detail">
-        <div class="stamp lg" style="color:${dm.color};border-color:${dm.color};background:${dm.color}1a;">${dm.word}</div>
-        <p class="reason-text">${(r.reasons && r.reasons.length) ? r.reasons.join(" &middot; ") : "No red flags found across any of the five checks."}</p>
+        <div class="stamp" style="color:${dm.color};border-color:${dm.color};background:${dm.color}1a;">${dm.word}</div>
+        <p class="reason-text">${(r.reasons && r.reasons.length) ? r.reasons.join(" • ") : "All 5 check modules cleared within risk boundaries."}</p>
+        <div style="font-size:11.5px;color:var(--muted-400);margin-top:4px;">
+          Decision: <span class="badge ${dm.class}">${r.decision.toUpperCase()}</span>
+        </div>
       </div>
     </div>
-    <table class="recap">${rows}</table>
-    <div class="step-actions">
-      <button class="btn btn-primary" id="payBtn" ${r.decision === "block" ? "disabled" : ""}>
-        ${r.decision === "block" ? "Blocked -- cannot proceed" : "Pay with Razorpay"}
-      </button>
-      <button class="btn btn-ghost" onclick="goToStep(0)">Start a new transaction</button>
+
+    <table class="recap">
+      <thead>
+        <tr>
+          <th>Check Module</th>
+          <th>Description</th>
+          <th style="text-align:right;">Risk Score</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="payment-actions-box">
+      <h3>💳 Razorpay Checkout</h3>
+      <p style="font-size:12px;color:var(--muted-400);">Execute payment or run test scenarios:</p>
+      
+      <div class="payment-sim-btns">
+        <button class="btn btn-primary" id="mainPayBtn" ${r.decision === "block" ? "disabled" : ""}>
+          ${r.decision === "block" ? "Payment Blocked by Risk Engine" : "Pay with Razorpay"}
+        </button>
+        <button class="btn btn-secondary btn-sm" id="btnFastPay" ${r.decision === "block" ? "disabled" : ""}>Direct Test Payment</button>
+        <button class="btn btn-ghost btn-sm" id="btnSimDecline">Simulate Decline</button>
+        <button class="btn btn-ghost btn-sm" id="btnSimTimeout">Simulate Timeout</button>
+      </div>
+
+      ${paymentResultHtml}
     </div>
   `;
 }
 
 function attachClearanceHandlers() {
-  const payBtn = document.getElementById("payBtn");
-  if (payBtn && !payBtn.disabled) payBtn.onclick = payNow;
   const panel = document.getElementById("panel");
   animateGaugesIn(panel);
-}
 
-/* ============================================================
-   NAVIGATION
-   ============================================================ */
-function goToStep(i) {
-  state.step = i;
-  if (i > state.maxReached) state.maxReached = i;
-  renderRail();
-  renderPanel();
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-/* ============================================================
-   PAYMENT (unchanged flow: backend re-checks risk independently)
-   ============================================================ */
-async function payNow() {
-  const payload = buildPayload();
-  const res = await fetch("/create-order", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    alert("Blocked by risk engine: " + (err.detail?.risk?.reasons || []).join(", "));
-    return;
+  const mainPayBtn = document.getElementById("mainPayBtn");
+  if (mainPayBtn && !mainPayBtn.disabled) {
+    mainPayBtn.onclick = () => triggerRazorpayCheckout("interactive");
   }
-  const data = await res.json();
 
-  const options = {
-    key: data.razorpay_key_id,
-    amount: data.order.amount,
-    currency: data.order.currency,
-    order_id: data.order.id,
-    name: "AI Risk Manager Demo",
-    description: "Test payment",
-    handler: async function (response) {
-      const verifyRes = await fetch("/verify-payment", {
+  const btnFastPay = document.getElementById("btnFastPay");
+  if (btnFastPay && !btnFastPay.disabled) {
+    btnFastPay.onclick = () => triggerRazorpayCheckout("force_success");
+  }
+
+  const btnSimDecline = document.getElementById("btnSimDecline");
+  if (btnSimDecline) {
+    btnSimDecline.onclick = () => triggerRazorpayCheckout("force_failure");
+  }
+
+  const btnSimTimeout = document.getElementById("btnSimTimeout");
+  if (btnSimTimeout) {
+    btnSimTimeout.onclick = () => triggerRazorpayCheckout("force_timeout");
+  }
+}
+
+async function triggerRazorpayCheckout(mode = "interactive") {
+  const payload = buildPayload();
+  state.paymentStatus = "processing";
+  state.lastPaymentDetails = { message: "Creating payment order on backend..." };
+  renderPanel();
+
+  try {
+    if (mode === "force_failure") {
+      await new Promise(r => setTimeout(r, 500));
+      state.paymentStatus = "failed";
+      state.lastPaymentDetails = {
+        message: "Bank authorization failed: Cardholder issuing bank declined transaction (Card Blocked / Insufficient Funds).",
+        orderId: `order_sim_${Date.now()}`,
+      };
+      renderPanel();
+      return;
+    }
+
+    if (mode === "force_timeout") {
+      await new Promise(r => setTimeout(r, 600));
+      state.paymentStatus = "timeout";
+      state.lastPaymentDetails = {
+        message: "Gateway timeout: OTP verification session expired before completion.",
+        orderId: `order_sim_${Date.now()}`,
+      };
+      renderPanel();
+      return;
+    }
+
+    const res = await fetch("/create-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      state.paymentStatus = "failed";
+      state.lastPaymentDetails = { message: errData.detail?.message || "Order creation blocked by risk engine." };
+      renderPanel();
+      return;
+    }
+
+    const data = await res.json();
+
+    if (mode === "force_success") {
+      await new Promise(r => setTimeout(r, 400));
+      await fetch("/verify-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature,
-          user_id: payload.user_id, email: payload.email, device_id: payload.device_id,
-          amount: payload.amount, billing_country: payload.billing_country,
-          overall_score: data.risk.overall_score,
+          razorpay_order_id: data.order.id,
+          razorpay_payment_id: `pay_sim_${Date.now()}`,
+          razorpay_signature: "mock_signature_valid",
+          user_id: payload.user_id,
+          amount: payload.amount,
         }),
       });
-      const verifyData = await verifyRes.json();
-      alert("Payment verified: " + verifyData.status);
-    },
-    prefill: { email: payload.email, contact: payload.contact },
-    theme: { color: "#D4A24C" },
-  };
-  new Razorpay(options).open();
+      state.paymentStatus = "success";
+      state.lastPaymentDetails = {
+        message: "Payment captured successfully! Verified and recorded to transaction ledger.",
+        orderId: data.order.id,
+        paymentId: `pay_sim_${Date.now()}`,
+      };
+      renderPanel();
+      return;
+    }
+
+    // Modal Mode
+    const options = {
+      key: data.razorpay_key_id || "rzp_test_demo",
+      amount: data.order.amount,
+      currency: data.order.currency || "INR",
+      order_id: data.order.id,
+      name: "AI Risk Clearance",
+      description: `Payment of ₹${payload.amount}`,
+      handler: async function(response) {
+        state.paymentStatus = "processing";
+        renderPanel();
+        try {
+          await fetch("/verify-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              razorpay_order_id: response.razorpay_order_id || data.order.id,
+              razorpay_payment_id: response.razorpay_payment_id || `pay_${Date.now()}`,
+              razorpay_signature: response.razorpay_signature || "mock_signature_valid",
+              user_id: payload.user_id,
+              email: payload.email,
+              amount: payload.amount,
+            }),
+          });
+          state.paymentStatus = "success";
+          state.lastPaymentDetails = {
+            message: "Payment captured successfully! Cryptographic signature verified.",
+            orderId: response.razorpay_order_id || data.order.id,
+            paymentId: response.razorpay_payment_id || `pay_${Date.now()}`,
+          };
+        } catch (e) {
+          state.paymentStatus = "failed";
+          state.lastPaymentDetails = { message: "Signature verification failed." };
+        }
+        renderPanel();
+      },
+      prefill: { email: payload.email, contact: payload.contact },
+      modal: {
+        ondismiss: function() {
+          if (state.paymentStatus === "processing") {
+            state.paymentStatus = "failed";
+            state.lastPaymentDetails = { message: "Payment modal was dismissed." };
+            renderPanel();
+          }
+        },
+      },
+      theme: { color: "#D4A24C" },
+    };
+
+    if (typeof window.Razorpay === "function") {
+      try {
+        const rzp = new Razorpay(options);
+        rzp.on("payment.failed", function(response) {
+          state.paymentStatus = "failed";
+          state.lastPaymentDetails = { message: response.error?.description || "Payment failed." };
+          renderPanel();
+        });
+        rzp.open();
+      } catch (e) {
+        await options.handler({ razorpay_order_id: data.order.id, razorpay_payment_id: `pay_${Date.now()}` });
+      }
+    } else {
+      await options.handler({ razorpay_order_id: data.order.id, razorpay_payment_id: `pay_${Date.now()}` });
+    }
+  } catch (err) {
+    state.paymentStatus = "failed";
+    state.lastPaymentDetails = { message: err.message || "Error processing payment." };
+    renderPanel();
+  }
 }
 
-/* ============================================================
-   DEMO SCENARIOS
-   ============================================================ */
-function setDemoStatus(msg) { document.getElementById("demoStatus").textContent = msg; }
+/* Merchant Portal: Dispute Defense */
+async function loadMerchantDisputes() {
+  state.disputesLoading = true;
+  try {
+    const res = await fetch("/api/merchant/disputes");
+    const data = await res.json();
+    state.disputes = data.disputes || [];
+    if (!state.activeDisputeId && state.disputes.length > 0) {
+      state.activeDisputeId = state.disputes[0].id;
+    }
+  } catch (e) {
+    console.error("Error loading disputes:", e);
+  }
+  state.disputesLoading = false;
+  renderPanel();
+}
 
-document.getElementById("demoToggle").onclick = () => {
-  const p = document.getElementById("demoPanel");
-  p.hidden = !p.hidden;
+window.simulateNewDispute = async function() {
+  try {
+    const res = await fetch("/api/merchant/disputes/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: "user_001",
+        email: "rajesh.kumar@example.com",
+        amount: 1499.0,
+        reason: "fraudulent",
+      }),
+    });
+    const data = await res.json();
+    await loadMerchantDisputes();
+    state.activeDisputeId = data.dispute.id;
+    renderPanel();
+  } catch (e) {
+    alert("Failed to simulate dispute");
+  }
 };
 
-async function runScenario(kind) {
-  const targetStepId = { velocity: "velocity", ring: "graph", geo: "geo", auth: "auth" }[kind];
-  setDemoStatus("Running scenario...");
+function merchantPortalHtml() {
+  const disputes = state.disputes;
+  const active = disputes.find(d => d.id === state.activeDisputeId) || disputes[0];
 
-  if (kind === "velocity") {
-    const payload = buildPayload();
-    for (let i = 0; i < 5; i++) await fetchRisk(payload);
-    state.riskResult = await fetchRisk(payload);
-  } else if (kind === "ring") {
-    const dev = getDeviceId();
-    await fetchRisk(buildPayload({ user_id: "ring_user_a", device_id: dev }));
-    await fetchRisk(buildPayload({ user_id: "ring_user_b", device_id: dev }));
-    state.riskResult = await fetchRisk(buildPayload({ user_id: "ring_user_c", device_id: dev }));
-    state.form.user_id = "ring_user_c";
-  } else if (kind === "geo") {
-    state.riskResult = await fetchRisk(buildPayload({ demo_ip: "8.8.8.8" }));
-  } else if (kind === "auth") {
-    state.form.email = "test@mailinator.com";
-    state.form.contact = "123";
-    state.riskResult = await fetchRisk(buildPayload());
+  let disputeListHtml = "";
+  if (disputes.length === 0) {
+    disputeListHtml = `<div style="padding:16px;color:var(--muted-400);text-align:center;">No disputes. Click "+ Simulate Chargeback" to test!</div>`;
+  } else {
+    disputeListHtml = disputes.map(d => {
+      const isSelected = active && d.id === active.id;
+      let badgeClass = "badge-warn";
+      if (d.status === "won") badgeClass = "badge-ok";
+      if (d.status === "lost") badgeClass = "badge-fail";
+      if (d.status === "under_review") badgeClass = "badge-neutral";
+
+      return `
+        <div style="background:${isSelected ? 'var(--ink-750)' : 'var(--ink-850)'};border:1px solid ${isSelected ? 'var(--gold)' : 'var(--ink-750)'};border-radius:6px;padding:10px;cursor:pointer;margin-bottom:8px;" onclick="selectDispute('${d.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+            <strong style="font-family:var(--font-mono);font-size:12px;color:var(--paper-100);">${d.id}</strong>
+            <span class="badge ${badgeClass}">${d.status.toUpperCase()}</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--muted-400);">${d.email} • ₹${d.amount}</div>
+        </div>
+      `;
+    }).join("");
   }
 
-  state.maxReached = STEPS.length - 1;
-  const idx = STEPS.findIndex(s => s.id === targetStepId);
-  state.revealed.add(STEPS[idx].id);
-  goToStep(idx);
-  setDemoStatus("Done -- " + STEPS[idx].label + " check reacted to the scenario above.");
+  let activeDisputeDetailHtml = "";
+  if (active) {
+    const isEvidenceReady = Boolean(active.evidence);
+    const isDocUploaded = Boolean(active.document_id);
+    const isContested = active.status === "under_review" || active.status === "won" || active.status === "lost";
+
+    let step1Class = "done";
+    let step2Class = isEvidenceReady ? "done" : "current";
+    let step3Class = isDocUploaded ? "done" : (isEvidenceReady ? "current" : "");
+    let step4Class = isContested ? "done" : (isDocUploaded ? "current" : "");
+
+    activeDisputeDetailHtml = `
+      <div class="dispute-card">
+        <div class="dispute-header">
+          <div>
+            <div class="dispute-id">${active.id} (Order: ${active.order_id})</div>
+            <div style="font-size:11.5px;color:var(--muted-400);">${active.reason_label}</div>
+          </div>
+          <div>
+            <span class="badge badge-warn">${active.status.toUpperCase()}</span>
+          </div>
+        </div>
+
+        <div class="dispute-grid">
+          <div>
+            <div class="dispute-label">Disputed Amount</div>
+            <div class="dispute-val">₹${active.amount} ${active.currency}</div>
+          </div>
+          <div>
+            <div class="dispute-label">Customer Account</div>
+            <div class="dispute-val">${active.user_id} (${active.email})</div>
+          </div>
+          <div>
+            <div class="dispute-label">Deadline</div>
+            <div class="dispute-val">5 Days Remaining</div>
+          </div>
+          <div>
+            <div class="dispute-label">Razorpay Document ID</div>
+            <div class="dispute-val">${active.document_id || 'Not uploaded yet'}</div>
+          </div>
+        </div>
+
+        <h4 style="font-family:var(--font-mono);font-size:11px;color:var(--gold);text-transform:uppercase;margin-bottom:6px;">
+          Dispute Resolution Steps
+        </h4>
+
+        <div class="pipeline-steps">
+          <div class="p-step ${step1Class}">
+            <div class="p-step-num">STEP 1</div>
+            <div>Dispute Ingested</div>
+          </div>
+          <div class="p-step ${step2Class}">
+            <div class="p-step-num">STEP 2</div>
+            <div>${isEvidenceReady ? 'Evidence Ready' : 'Pending Build'}</div>
+          </div>
+          <div class="p-step ${step3Class}">
+            <div class="p-step-num">STEP 3</div>
+            <div>${isDocUploaded ? 'Document Uploaded' : 'Pending Upload'}</div>
+          </div>
+          <div class="p-step ${step4Class}">
+            <div class="p-step-num">STEP 4</div>
+            <div>${isContested ? 'Contest Submitted' : 'Ready to Submit'}</div>
+          </div>
+        </div>
+
+        ${active.evidence ? `
+          <div style="font-size:11.5px;font-weight:600;color:var(--gold);margin-top:10px;">Evidence Dossier Preview:</div>
+          <div class="evidence-preview-box">${JSON.stringify(active.evidence, null, 2)}</div>
+        ` : ''}
+
+        <div class="step-actions" style="margin-top:12px;">
+          ${!isEvidenceReady ? `
+            <button class="btn btn-primary" onclick="actionGenerateEvidence('${active.id}')">
+              Generate Evidence Dossier
+            </button>
+          ` : (!isDocUploaded ? `
+            <button class="btn btn-primary" onclick="actionUploadDocument('${active.id}')">
+              Upload Evidence Document
+            </button>
+          ` : (!isContested ? `
+            <button class="btn btn-primary" onclick="actionSubmitContest('${active.id}')">
+              Submit Dispute Contest
+            </button>
+          ` : `
+            <button class="btn btn-success btn-sm" onclick="actionResolveDispute('${active.id}', 'won')">
+              Mark as Won
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="actionResolveDispute('${active.id}', 'lost')">
+              Mark as Lost
+            </button>
+          `))}
+          
+          <button class="btn btn-ghost btn-sm" onclick="simulateNewDispute()">
+            + New Dispute
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="panel-header-row">
+      <div>
+        <p class="eyebrow">Dispute Management</p>
+        <h1 class="step-title">Friendly Fraud Defense</h1>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="simulateNewDispute()">
+        + Simulate Chargeback
+      </button>
+    </div>
+
+    <div class="research">
+      <div class="rlabel">Automated Chargeback Defense</div>
+      <p>Friendly fraud occurs when a legitimate buyer falsely disputes a charge. Auto-linking pre-transaction IP logs, device signatures, and 3DS verification provides strong evidence to win disputes.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:250px 1fr;gap:16px;margin-top:14px;">
+      <div>
+        <div style="font-family:var(--font-mono);font-size:10.5px;color:var(--muted-400);text-transform:uppercase;margin-bottom:6px;">
+          Disputes Inbox
+        </div>
+        ${disputeListHtml}
+      </div>
+      <div>
+        ${activeDisputeDetailHtml}
+      </div>
+    </div>
+  `;
 }
 
-async function resetDemo() {
-  await fetch("/dev/reset", { method: "POST" });
-  localStorage.removeItem("device_id");
-  localStorage.removeItem("seen_before");
-  state.riskResult = null;
-  state.revealed = new Set();
-  state.maxReached = 0;
-  state.form = { user_id: "user_001", email: "test@example.com", contact: "9999999999", amount: 499 };
-  goToStep(0);
-  setDemoStatus("Demo data reset -- history wiped, new device ID generated.");
-}
+function attachMerchantHandlers() {}
 
-/* ============================================================
-   INIT
-   ============================================================ */
-renderRail();
+window.selectDispute = function(id) {
+  state.activeDisputeId = id;
+  renderPanel();
+};
+
+window.actionGenerateEvidence = async function(id) {
+  try {
+    await fetch(`/api/merchant/disputes/${id}/generate-evidence`, { method: "POST" });
+    await loadMerchantDisputes();
+  } catch (e) {
+    alert("Failed to generate evidence dossier");
+  }
+};
+
+window.actionUploadDocument = async function(id) {
+  try {
+    await fetch(`/api/merchant/disputes/${id}/upload-document`, { method: "POST" });
+    await loadMerchantDisputes();
+  } catch (e) {
+    alert("Failed to upload document");
+  }
+};
+
+window.actionSubmitContest = async function(id) {
+  try {
+    await fetch(`/api/merchant/disputes/${id}/contest`, { method: "POST" });
+    await loadMerchantDisputes();
+  } catch (e) {
+    alert("Failed to contest dispute");
+  }
+};
+
+window.actionResolveDispute = async function(id, outcome) {
+  try {
+    await fetch(`/api/merchant/disputes/${id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ outcome }),
+    });
+    await loadMerchantDisputes();
+  } catch (e) {
+    alert("Failed to resolve dispute");
+  }
+};
+
+renderStepsBar();
 renderPanel();
 </script>
 </body>

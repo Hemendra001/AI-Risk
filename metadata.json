@@ -1,0 +1,6 @@
+{
+  "name": "AI Risk Manager",
+  "description": "Pre-transaction AI risk scoring and merchant-side automated chargeback friendly fraud defense integrated with Razorpay.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

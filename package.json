@@ -1,0 +1,17 @@
+{
+  "name": "ai-risk-manager",
+  "version": "1.0.0",
+  "description": "Pre-transaction AI risk scoring and fraud prevention prototype integrated with Razorpay checkout.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "echo 'Build complete'",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "razorpay": "^2.9.4"
+  }
+}
