@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risk Clearance -- Razorpay prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<style>
+  :root {
+    --ink-950: #0B111C;
+    --ink-850: #141D2B;
+    --ink-800: #1B2536;
+    --ink-750: #232E42;
+    --paper-100: #E8EBF1;
+    --muted-400: #8793A8;
+    --teal: #4FD1AE;
+    --gold: #D4A24C;
+    --coral: #FF6B5E;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Inter', -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink-950);
+    color: var(--paper-100);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .brand {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    color: var(--muted-400);
+  }
+  .brand span { color: var(--paper-100); }
+  .demo-toggle {
+    background: transparent;
+    border: 1px solid var(--ink-750);
+    color: var(--muted-400);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 7px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .demo-toggle:hover { color: var(--paper-100); border-color: var(--gold); }
+
+  .demo-panel {
+    max-width: 980px;
+    margin: 0 auto 8px;
+    padding: 16px 24px;
+    background: var(--ink-850);
+    border-top: 1px solid var(--ink-750);
+    border-bottom: 1px solid var(--ink-750);
+  }
+  .demo-panel h4 {
+    margin: 0 0 4px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  .demo-panel p { margin: 0 0 12px; font-size: 12.5px; color: var(--muted-400); max-width: 60ch; }
+  .demo-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .demo-btn {
+    background: var(--ink-800);
+    border: 1px solid var(--ink-750);
+    color: var(--paper-100);
+    font-size: 12.5px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .demo-btn:hover { border-color: var(--gold); }
+  .demo-btn.reset { color: var(--coral); border-color: rgba(255,107,94,0.35); margin-left: auto; }
+  .demo-status { margin-top: 10px; font-size: 12px; color: var(--muted-400); min-height: 16px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 32px;
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 28px 24px 80px;
+  }
+
+  .rail { display: flex; flex-direction: column; gap: 2px; }
+  .rail-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 10px;
+    border-radius: 8px;
+    cursor: default;
+    opacity: 0.35;
+  }
+  .rail-item.reachable { cursor: pointer; opacity: 0.62; }
+  .rail-item.reachable:hover { background: var(--ink-850); }
+  .rail-item.current { opacity: 1; background: var(--ink-850); }
+  .rail-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--ink-750);
+    color: var(--muted-400);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .rail-item.current .rail-num { border-color: var(--gold); color: var(--gold); }
+  .rail-num.dot-pass { border-color: var(--teal); background: var(--teal); color: var(--ink-950); }
+  .rail-num.dot-warn { border-color: var(--gold); background: var(--gold); color: var(--ink-950); }
+  .rail-num.dot-fail { border-color: var(--coral); background: var(--coral); color: var(--ink-950); }
+  .rail-label { font-size: 13px; line-height: 1.3; }
+  .rail-item.current .rail-label { color: var(--paper-100); font-weight: 500; }
+  .rail-item:not(.current) .rail-label { color: var(--muted-400); }
+
+  .panel {
+    background: var(--ink-850);
+    border: 1px solid var(--ink-750);
+    border-radius: 14px;
+    padding: 32px;
+    min-height: 420px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--muted-400);
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+  h1.step-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 28px;
+    margin: 0 0 20px;
+    line-height: 1.15;
+  }
+
+  .research {
+    background: var(--ink-800);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 8px 8px 0;
+    padding: 16px 18px;
+    margin-bottom: 26px;
+  }
+  .research .rlabel {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .research p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.6; color: var(--paper-100); }
+  .research a { color: var(--muted-400); font-size: 11.5px; }
+  .research a:hover { color: var(--gold); }
+
+  .signal-card {
+    background: var(--ink-800);
+    border: 1px solid var(--ink-750);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+  .signal-empty { font-size: 13px; color: var(--muted-400); }
+  .signal-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0; font-size: 13px;
+  }
+  .signal-row + .signal-row { border-top: 1px solid var(--ink-750); }
+  .signal-label { color: var(--muted-400); }
+  .signal-value { font-family: var(--font-mono); font-weight: 600; font-size: 15px; color: var(--paper-100); }
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .badge-ok { background: #4FD1AE1a; color: #4FD1AE; border: 1px solid #4FD1AE55; }
+  .badge-warn { background: #D4A24C1a; color: #D4A24C; border: 1px solid #D4A24C55; }
+  .badge-neutral { background: var(--ink-750); color: var(--muted-400); border: 1px solid var(--ink-750); }
+
+  label { display: block; font-size: 12.5px; color: var(--muted-400); margin-bottom: 5px; }
+  input {
+    width: 100%;
+    background: var(--ink-800);
+    border: 1px solid var(--ink-750);
+    color: var(--paper-100);
+    padding: 10px 12px;
+    border-radius: 7px;
+    font-size: 14px;
+    margin-bottom: 16px;
+    font-family: var(--font-body);
+  }
+  input:focus { border-color: var(--gold); }
+  .field-error { color: var(--coral); font-size: 12px; margin: -10px 0 14px; }
+
+  .btn {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 11px 20px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--gold); color: var(--ink-950); }
+  .btn-primary:disabled { background: var(--ink-750); color: var(--muted-400); cursor: not-allowed; }
+  .btn-ghost { background: transparent; border: 1px solid var(--ink-750); color: var(--paper-100); }
+
+  .scan-row { display: flex; align-items: center; gap: 12px; color: var(--muted-400); font-size: 13.5px; margin: 8px 0 20px; }
+  .spinner {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--ink-750); border-top-color: var(--gold);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result-row { display: flex; align-items: center; gap: 28px; margin: 6px 0 24px; flex-wrap: wrap; }
+  .gauge { position: relative; }
+  .gauge svg { display: block; }
+  .gauge-track { fill: none; stroke: var(--ink-750); stroke-width: 10; }
+  .gauge-fill { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 900ms ease; }
+  .gauge-center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .gauge-score { font-family: var(--font-mono); font-size: 28px; font-weight: 500; }
+  .gauge-max { font-family: var(--font-mono); font-size: 11px; color: var(--muted-400); }
+
+  .result-detail { max-width: 380px; }
+  .stamp {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 4px;
+    border: 2px dashed;
+    transform: rotate(-2.5deg);
+    margin-bottom: 10px;
+  }
+  .stamp.lg { font-size: 15px; padding: 8px 20px; }
+  .reason-text { font-size: 13px; color: var(--muted-400); line-height: 1.5; margin: 0; }
+
+  .recap { width: 100%; border-collapse: collapse; margin: 18px 0 26px; font-family: var(--font-mono); font-size: 13px; }
+  .recap td { padding: 8px 0; border-bottom: 1px solid var(--ink-750); }
+  .recap td:last-child { text-align: right; }
+
+  .step-actions { display: flex; gap: 10px; margin-top: 8px; }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; padding: 20px 16px 60px; gap: 16px; }
+    .rail { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+    .rail-item { flex-direction: column; align-items: center; text-align: center; min-width: 78px; }
+    .rail-label { font-size: 10.5px; }
+    .panel { padding: 22px 18px; }
+    h1.step-title { font-size: 22px; }
+    .result-row { gap: 16px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">RISK<span>CLEARANCE</span></div>
+  <button class="demo-toggle" id="demoToggle">Demo tools</button>
+</header>
+
+<div class="demo-panel" id="demoPanel" hidden>
+  <h4>Buildathon demo mode</h4>
+  <p>Each button feeds the engine data that satisfies one module's real trigger condition, so you can show every check reacting on demand instead of hoping for a coincidence.</p>
+  <div class="demo-btns">
+    <button class="demo-btn" onclick="runScenario('velocity')">Simulate bot attack</button>
+    <button class="demo-btn" onclick="runScenario('ring')">Simulate fraud ring</button>
+    <button class="demo-btn" onclick="runScenario('geo')">Simulate foreign IP</button>
+    <button class="demo-btn" onclick="runScenario('auth')">Simulate bad identity</button>
+    <button class="demo-btn reset" onclick="resetDemo()">Reset demo data</button>
+  </div>
+  <div class="demo-status" id="demoStatus"></div>
+</div>
+
+<div class="layout">
+  <nav class="rail" id="rail"></nav>
+  <main class="panel" id="panel"></main>
+</div>
+
+<script>
+/* ============================================================
+   STEP DEFINITIONS
+   Each module step carries a short, sourced "field note" so the
+   wizard doubles as a mini explainer, not just a scoreboard.
+   ============================================================ */
+const STEPS = [
+  { id: "details", label: "Details" },
+  {
+    id: "ml", key: "ml_score", label: "ML behaviour",
+    eyebrow: "Checkpoint 1 of 5", title: "ML behaviour score",
+    loading: "Comparing this transaction against the user's history...",
+    research: `Account takeover held its place as the single costliest form of identity fraud in the US through 2025 -- an estimated 6 million people affected and losses above $15 billion, per Javelin Strategy &amp; Research. It's hard to catch with static rules alone: a hijacked account already carries real purchase history, saved cards and a trusted device list, exactly the signals a brand-new fake account would lack. A behaviour-based score closes that gap by comparing each transaction against how <em>this</em> user normally spends.`,
+    sourceLabel: "Javelin Research, via DeepStrike -- read more",
+    sourceUrl: "https://deepstrike.io/blog/account-takeover-fraud-statistics",
+  },
+  {
+    id: "velocity", key: "velocity_score", label: "Velocity",
+    eyebrow: "Checkpoint 2 of 5", title: "Velocity check",
+    loading: "Counting recent attempts from this user, device and IP...",
+    research: `Card testing -- bots quietly firing hundreds or thousands of small transactions to find out which stolen card numbers still work -- rose roughly 65% between mid-2024 and mid-2025, per Signifyd's fraud trends report. A single attack can flood a checkout with thousands of micro-charges in minutes. Because each charge is small, frequency gives it away, not size.`,
+    sourceLabel: "Signifyd, State of Fraud 2025 -- read more",
+    sourceUrl: "https://www.signifyd.com/ecommerce-fraud-and-returns-trends-2025/",
+  },
+  {
+    id: "geo", key: "geo_score", label: "Geo & IP",
+    eyebrow: "Checkpoint 3 of 5", title: "Geo & IP check",
+    loading: "Resolving IP location and checking for VPN/proxy use...",
+    research: `Cross-border transactions are estimated to account for roughly 45% of all e-commerce fraud, despite being a far smaller share of genuine international sales -- largely because VPNs and proxies let an attacker mask where a transaction really originates. Most fraud teams now treat a live VPN signal as one input among several, not an automatic block, since plenty of honest travellers use VPNs too.`,
+    sourceLabel: "E-commerce fraud statistics -- read more",
+    sourceUrl: "https://wifitalents.com/ecommerce-fraud-statistics/",
+  },
+  {
+    id: "graph", key: "graph_score", label: "Link graph",
+    eyebrow: "Checkpoint 4 of 5", title: "Link / graph check",
+    loading: "Checking how many accounts share this device or IP...",
+    research: `This is exactly the pattern the Reserve Bank of India built a dedicated AI tool to catch. RBI's MuleHunter.AI, piloted with two public-sector banks from December 2024, flags "mule" accounts by spotting shared attributes -- the same device, the same contact details -- reused across accounts that otherwise look unrelated. A single transaction looks ordinary; the fraud only shows up once you look at the network around it.`,
+    sourceLabel: "Business Standard, on RBI/NPCI measures -- read more",
+    sourceUrl: "https://www.business-standard.com/finance/news/upi-transaction-fraud-india-survey-one-in-five-users-hit-localcircles-125062601141_1.html",
+  },
+  {
+    id: "auth", key: "auth_score", label: "Auth & KYC",
+    eyebrow: "Checkpoint 5 of 5", title: "Auth & KYC check",
+    loading: "Checking email and phone quality signals...",
+    research: `It's tempting to assume the biggest payments risk is fraud getting through -- but several industry studies suggest the bigger revenue hit is the opposite problem: good customers wrongly declined. Riskified and partners put the global cost of these "false declines" near $443 billion a year, several times larger than actual card fraud losses. That's the real case for routing borderline cases to a one-time password instead of an outright block.`,
+    sourceLabel: "Riskified, false decline research -- read more",
+    sourceUrl: "https://www.riskified.com/learning/ecommerce-checkout-optimization/false-declines/",
+  },
+  { id: "clearance", label: "Clearance" },
+];
+
+const MODULE_STEPS = STEPS.filter(s => s.key);
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const state = {
+  step: 0,
+  riskResult: null,   // full response from /risk-check once fetched
+  revealed: new Set(), // step ids whose score has been shown
+  maxReached: 0,
+  form: { user_id: "user_001", email: "test@example.com", contact: "9999999999", amount: 499 },
+  accountSignals: null,      // last response from /user-history
+  accountSignalsLoading: false,
+};
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function getDeviceId() {
+  let id = localStorage.getItem("device_id");
+  if (!id) { id = "dev_" + Math.random().toString(36).slice(2); localStorage.setItem("device_id", id); }
+  return id;
+}
+
+function buildPayload(overrides = {}) {
+  return Object.assign({
+    user_id: state.form.user_id,
+    email: state.form.email,
+    contact: state.form.contact,
+    amount: parseFloat(state.form.amount),
+    device_id: getDeviceId(),
+    is_new_device: !localStorage.getItem("seen_before"),
+    billing_country: "IN",
+    distance_km_from_last_txn: 0,
+  }, overrides);
+}
+
+async function fetchRisk(payload) {
+  const res = await fetch("/risk-check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  localStorage.setItem("seen_before", "1");
+  return res.json();
+}
+
+function scoreColor(score) {
+  if (score <= 30) return "#4FD1AE";
+  if (score <= 70) return "#D4A24C";
+  return "#FF6B5E";
+}
+function scoreLabel(score) {
+  if (score <= 30) return "Low signal";
+  if (score <= 70) return "Elevated";
+  return "High risk";
+}
+function decisionMeta(decision) {
+  if (decision === "allow") return { color: "#4FD1AE", word: "Cleared" };
+  if (decision === "step_up") return { color: "#D4A24C", word: "Additional verification" };
+  return { color: "#FF6B5E", word: "Declined" };
+}
+
+function gaugeHtml(score, size = 130) {
+  const r = size / 2 - 10;
+  const c = 2 * Math.PI * r;
+  const offset = c - (score / 100) * c;
+  const color = scoreColor(score);
+  return `
+    <div class="gauge" style="width:${size}px;height:${size}px;">
+      <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+        <circle class="gauge-track" cx="${size/2}" cy="${size/2}" r="${r}"></circle>
+        <circle class="gauge-fill" cx="${size/2}" cy="${size/2}" r="${r}"
+          stroke="${color}" stroke-dasharray="${c}" stroke-dashoffset="${c}"
+          transform="rotate(-90 ${size/2} ${size/2})" data-final-offset="${offset}"></circle>
+      </svg>
+      <div class="gauge-center">
+        <span class="gauge-score">${score}</span>
+        <span class="gauge-max">/ 100</span>
+      </div>
+    </div>`;
+}
+
+function animateGaugesIn(container) {
+  container.querySelectorAll(".gauge-fill").forEach(el => {
+    const final = el.getAttribute("data-final-offset");
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.strokeDashoffset = final; }));
+  });
+}
+
+/* ============================================================
+   RENDER: RAIL
+   ============================================================ */
+function renderRail() {
+  const rail = document.getElementById("rail");
+  rail.innerHTML = STEPS.map((s, i) => {
+    const reachable = i <= state.maxReached;
+    const isCurrent = i === state.step;
+    let numClass = "rail-num";
+    let numContent = i === 0 ? "i" : (i === STEPS.length - 1 ? "\u2713" : i);
+    if (s.key && state.revealed.has(s.id) && state.riskResult) {
+      const sc = state.riskResult.breakdown[s.key];
+      numClass += sc <= 30 ? " dot-pass" : sc <= 70 ? " dot-warn" : " dot-fail";
+      numContent = i;
+    }
+    return `<div class="rail-item ${isCurrent ? "current" : ""} ${reachable ? "reachable" : ""}"
+                 onclick="${reachable ? `goToStep(${i})` : ""}">
+              <span class="${numClass}">${numContent}</span>
+              <span class="rail-label">${s.label}</span>
+            </div>`;
+  }).join("");
+}
+
+/* ============================================================
+   RENDER: PANEL
+   ============================================================ */
+function renderPanel() {
+  const panel = document.getElementById("panel");
+  const step = STEPS[state.step];
+
+  if (step.id === "details") { panel.innerHTML = detailsHtml(); attachDetailsHandlers(); return; }
+  if (step.id === "clearance") { panel.innerHTML = clearanceHtml(); attachClearanceHandlers(); return; }
+
+  // module step
+  const already = state.revealed.has(step.id);
+  panel.innerHTML = `
+    <p class="eyebrow">${step.eyebrow}</p>
+    <h1 class="step-title">${step.title}</h1>
+    <div class="research">
+      <div class="rlabel">Field notes</div>
+      <p>${step.research}</p>
+      <a href="${step.sourceUrl}" target="_blank" rel="noopener">${step.sourceLabel}</a>
+    </div>
+    <div id="moduleResult">${already ? moduleResultHtml(step) : `<div class="scan-row"><span class="spinner"></span><span>${step.loading}</span></div>`}</div>
+    <div class="step-actions" id="moduleActions"></div>
+  `;
+  animateGaugesIn(panel);
+
+  if (already) {
+    renderModuleActions();
+  } else {
+    setTimeout(() => {
+      state.revealed.add(step.id);
+      document.getElementById("moduleResult").innerHTML = moduleResultHtml(step);
+      animateGaugesIn(panel);
+      renderModuleActions();
+    }, 900);
+  }
+}
+
+function moduleResultHtml(step) {
+  const score = state.riskResult.breakdown[step.key];
+  const color = scoreColor(score);
+  const reasons = (state.riskResult.reasons || []).filter(r =>
+    // best-effort: show only reasons relevant-looking to this module by keyword match, else show all on first module
+    true
+  );
+  return `
+    <div class="result-row">
+      ${gaugeHtml(score)}
+      <div class="result-detail">
+        <div class="stamp" style="color:${color};border-color:${color};background:${color}1a;">${scoreLabel(score)}</div>
+        <p class="reason-text">${reasonForModule(step) || "No red flags found for this check on this transaction."}</p>
+      </div>
+    </div>`;
+}
+
+function reasonForModule(step) {
+  // aggregator returns a flat reasons[] list; match by rough keyword so each
+  // step only shows the note relevant to it instead of repeating all five.
+  const all = state.riskResult.reasons || [];
+  const keyword = {
+    ml: "behaviour", velocity: "transaction", geo: "country", graph: "accounts", auth: "email",
+  }[step.id];
+  const hit = all.find(r => r.toLowerCase().includes(keyword));
+  return hit || null;
+}
+
+function renderModuleActions() {
+  const idx = state.step;
+  const isLast = idx === MODULE_STEPS.length; // last module step index in STEPS array
+  const label = idx === STEPS.length - 2 ? "See clearance decision \u2192" : "Continue \u2192";
+  document.getElementById("moduleActions").innerHTML =
+    `<button class="btn btn-primary" onclick="goToStep(${idx + 1})">${label}</button>`;
+}
+
+/* ============================================================
+   ACCOUNT SIGNALS (previous-transaction count + location change)
+   Shown on the very first (intake) page, before the 5-module engine runs.
+   ============================================================ */
+async function loadAccountSignals(user_id) {
+  if (!user_id) { state.accountSignals = null; renderAccountSignals(); return; }
+  state.accountSignalsLoading = true;
+  renderAccountSignals();
+  try {
+    const res = await fetch(`/user-history?user_id=${encodeURIComponent(user_id)}`);
+    state.accountSignals = await res.json();
+  } catch (e) {
+    state.accountSignals = null;
+  }
+  state.accountSignalsLoading = false;
+  renderAccountSignals();
+}
+
+function renderAccountSignals() {
+  const el = document.getElementById("accountSignals");
+  if (el) el.innerHTML = accountSignalsHtml();
+}
+
+function accountSignalsHtml() {
+  if (state.accountSignalsLoading) {
+    return `<div class="scan-row" style="margin:0;"><span class="spinner"></span><span>Checking account history...</span></div>`;
+  }
+  const s = state.accountSignals;
+  if (!s) {
+    return `<div class="signal-empty">Enter a user ID to see their transaction history and location signals.</div>`;
+  }
+
+  const anomalyBadge = s.multiple_anomaly_flag
+    ? `<span class="badge badge-warn">\u26A0 ${s.txns_last_hour} txns in the last hour</span>`
+    : `<span class="badge badge-ok">Normal frequency</span>`;
+
+  let locationBadge;
+  if (!s.last_known_country || !s.current_country) {
+    locationBadge = `<span class="badge badge-neutral">No prior location on file</span>`;
+  } else if (s.location_changed) {
+    locationBadge = `<span class="badge badge-warn">\u26A0 Changed: ${s.last_known_country} \u2192 ${s.current_country}</span>`;
+  } else {
+    locationBadge = `<span class="badge badge-ok">Unchanged (${s.current_country})</span>`;
+  }
+
+  return `
+    <div class="signal-row">
+      <div class="signal-label">Previous transactions</div>
+      <div class="signal-value">${s.previous_transaction_count}</div>
+    </div>
+    <div class="signal-row">
+      <div class="signal-label">Transaction frequency</div>
+      <div>${anomalyBadge}</div>
+    </div>
+    <div class="signal-row">
+      <div class="signal-label">Location vs. last transaction</div>
+      <div>${locationBadge}</div>
+    </div>
+  `;
+}
+
+function detailsHtml() {
+  return `
+    <p class="eyebrow">Intake</p>
+    <h1 class="step-title">Transaction details</h1>
+    <div class="research">
+      <div class="rlabel">Why this exists</div>
+      <p>India processed 185.8 billion UPI transactions in FY 2024-25, up nearly 42% year-on-year, and a LocalCircles survey found roughly 1 in 5 UPI-using families had faced fraud at least once in the past three years. This wizard walks one transaction through the same five checks a production risk engine would run before it ever reaches Razorpay.</p>
+      <a href="https://www.business-standard.com/finance/news/upi-transaction-fraud-india-survey-one-in-five-users-hit-localcircles-125062601141_1.html" target="_blank" rel="noopener">Business Standard / LocalCircles -- read more</a>
+    </div>
+    <div class="signal-card" id="accountSignals">${accountSignalsHtml()}</div>
+    <label>Name / user ID</label>
+    <input id="f_user_id" value="${state.form.user_id}">
+    <label>Email</label>
+    <input id="f_email" value="${state.form.email}">
+    <label>Phone</label>
+    <input id="f_contact" value="${state.form.contact}">
+    <label>Amount (INR)</label>
+    <input id="f_amount" type="number" value="${state.form.amount}">
+    <p class="field-error" id="detailsError" style="display:none;"></p>
+    <button class="btn btn-primary" id="beginBtn">Begin risk assessment \u2192</button>
+  `;
+}
+
+function attachDetailsHandlers() {
+  const userIdInput = document.getElementById("f_user_id");
+  let debounceTimer;
+  const triggerLookup = () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => loadAccountSignals(userIdInput.value.trim()), 350);
+  };
+  triggerLookup(); // load signals for the pre-filled default user ID right away
+  userIdInput.addEventListener("input", triggerLookup);
+
+  document.getElementById("beginBtn").onclick = async () => {
+    const user_id = document.getElementById("f_user_id").value.trim();
+    const email = document.getElementById("f_email").value.trim();
+    const contact = document.getElementById("f_contact").value.trim();
+    const amount = parseFloat(document.getElementById("f_amount").value);
+    const err = document.getElementById("detailsError");
+
+    if (!user_id || !email.includes("@") || !contact || !(amount > 0)) {
+      err.textContent = "Check that user ID, a valid email, phone, and an amount greater than 0 are all filled in.";
+      err.style.display = "block";
+      return;
+    }
+    err.style.display = "none";
+
+    state.form = { user_id, email, contact, amount };
+    const btn = document.getElementById("beginBtn");
+    btn.disabled = true;
+    btn.textContent = "Running 5 checks...";
+
+    state.riskResult = await fetchRisk(buildPayload());
+    state.revealed = new Set();
+    state.maxReached = 1;
+    goToStep(1);
+  };
+}
+
+function clearanceHtml() {
+  if (!state.riskResult) {
+    return `<p class="eyebrow">Final</p><h1 class="step-title">Clearance decision</h1><p>Complete the checks first.</p>`;
+  }
+  const r = state.riskResult;
+  const dm = decisionMeta(r.decision);
+  const rows = MODULE_STEPS.map(s => `<tr><td>${s.label}</td><td>${r.breakdown[s.key]} / 100</td></tr>`).join("");
+
+  return `
+    <p class="eyebrow">Final</p>
+    <h1 class="step-title">Clearance decision</h1>
+    <div class="research">
+      <div class="rlabel">Why this matters</div>
+      <p>Digital payment fraud losses in India rose roughly 41-fold over five years, nearing &#8377;23,000 crore, prompting RBI to explore extra friction -- like short delays and step-up checks -- on high-value transactions. That's precisely the kind of call this final step is modelling.</p>
+      <a href="https://the420.in/rbi-digital-payment-security-upi-fraud-kill-switch-delay/" target="_blank" rel="noopener">The420.in, on RBI's proposed safeguards -- read more</a>
+    </div>
+    <div class="result-row">
+      ${gaugeHtml(r.overall_score, 150)}
+      <div class="result-detail">
+        <div class="stamp lg" style="color:${dm.color};border-color:${dm.color};background:${dm.color}1a;">${dm.word}</div>
+        <p class="reason-text">${(r.reasons && r.reasons.length) ? r.reasons.join(" &middot; ") : "No red flags found across any of the five checks."}</p>
+      </div>
+    </div>
+    <table class="recap">${rows}</table>
+    <div class="step-actions">
+      <button class="btn btn-primary" id="payBtn" ${r.decision === "block" ? "disabled" : ""}>
+        ${r.decision === "block" ? "Blocked -- cannot proceed" : "Pay with Razorpay"}
+      </button>
+      <button class="btn btn-ghost" onclick="goToStep(0)">Start a new transaction</button>
+    </div>
+  `;
+}
+
+function attachClearanceHandlers() {
+  const payBtn = document.getElementById("payBtn");
+  if (payBtn && !payBtn.disabled) payBtn.onclick = payNow;
+  const panel = document.getElementById("panel");
+  animateGaugesIn(panel);
+}
+
+/* ============================================================
+   NAVIGATION
+   ============================================================ */
+function goToStep(i) {
+  state.step = i;
+  if (i > state.maxReached) state.maxReached = i;
+  renderRail();
+  renderPanel();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* ============================================================
+   PAYMENT (unchanged flow: backend re-checks risk independently)
+   ============================================================ */
+async function payNow() {
+  const payload = buildPayload();
+  const res = await fetch("/create-order", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    alert("Blocked by risk engine: " + (err.detail?.risk?.reasons || []).join(", "));
+    return;
+  }
+  const data = await res.json();
+
+  const options = {
+    key: data.razorpay_key_id,
+    amount: data.order.amount,
+    currency: data.order.currency,
+    order_id: data.order.id,
+    name: "AI Risk Manager Demo",
+    description: "Test payment",
+    handler: async function (response) {
+      const verifyRes = await fetch("/verify-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+          user_id: payload.user_id, email: payload.email, device_id: payload.device_id,
+          amount: payload.amount, billing_country: payload.billing_country,
+          overall_score: data.risk.overall_score,
+        }),
+      });
+      const verifyData = await verifyRes.json();
+      alert("Payment verified: " + verifyData.status);
+    },
+    prefill: { email: payload.email, contact: payload.contact },
+    theme: { color: "#D4A24C" },
+  };
+  new Razorpay(options).open();
+}
+
+/* ============================================================
+   DEMO SCENARIOS
+   ============================================================ */
+function setDemoStatus(msg) { document.getElementById("demoStatus").textContent = msg; }
+
+document.getElementById("demoToggle").onclick = () => {
+  const p = document.getElementById("demoPanel");
+  p.hidden = !p.hidden;
+};
+
+async function runScenario(kind) {
+  const targetStepId = { velocity: "velocity", ring: "graph", geo: "geo", auth: "auth" }[kind];
+  setDemoStatus("Running scenario...");
+
+  if (kind === "velocity") {
+    const payload = buildPayload();
+    for (let i = 0; i < 5; i++) await fetchRisk(payload);
+    state.riskResult = await fetchRisk(payload);
+  } else if (kind === "ring") {
+    const dev = getDeviceId();
+    await fetchRisk(buildPayload({ user_id: "ring_user_a", device_id: dev }));
+    await fetchRisk(buildPayload({ user_id: "ring_user_b", device_id: dev }));
+    state.riskResult = await fetchRisk(buildPayload({ user_id: "ring_user_c", device_id: dev }));
+    state.form.user_id = "ring_user_c";
+  } else if (kind === "geo") {
+    state.riskResult = await fetchRisk(buildPayload({ demo_ip: "8.8.8.8" }));
+  } else if (kind === "auth") {
+    state.form.email = "test@mailinator.com";
+    state.form.contact = "123";
+    state.riskResult = await fetchRisk(buildPayload());
+  }
+
+  state.maxReached = STEPS.length - 1;
+  const idx = STEPS.findIndex(s => s.id === targetStepId);
+  state.revealed.add(STEPS[idx].id);
+  goToStep(idx);
+  setDemoStatus("Done -- " + STEPS[idx].label + " check reacted to the scenario above.");
+}
+
+async function resetDemo() {
+  await fetch("/dev/reset", { method: "POST" });
+  localStorage.removeItem("device_id");
+  localStorage.removeItem("seen_before");
+  state.riskResult = null;
+  state.revealed = new Set();
+  state.maxReached = 0;
+  state.form = { user_id: "user_001", email: "test@example.com", contact: "9999999999", amount: 499 };
+  goToStep(0);
+  setDemoStatus("Demo data reset -- history wiped, new device ID generated.");
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+renderRail();
+renderPanel();
+</script>
+</body>
+</html>
