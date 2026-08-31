@@ -1,209 +1,952 @@
-# AI Risk Manager -- Razorpay payment prototype
+# AI Risk Manager
 
-A working prototype of a **pre-transaction risk scoring system**: before any
-payment is allowed to reach Razorpay, 5 independent checks run and produce
-an overall risk score (0-100), which decides whether the transaction is
-**allowed**, sent to **step-up authentication** (OTP), or **blocked outright**.
+## Pre-Transaction Fraud Detection & Merchant Risk Management
 
+AI Risk Manager is a full-stack fraud-risk application that evaluates a
+payment **before the payment order is created**.
+
+Instead of depending on one fraud rule, it combines multiple signals:
+
+-   **ML Behaviour** --- checks whether the transaction looks unusual
+    for the user.
+-   **Velocity** --- checks how many transactions are happening in a
+    short period.
+-   **Geo & IP** --- checks IP/location consistency and
+    proxy/VPN/hosting signals.
+-   **Link Graph** --- checks whether the same device or IP is being
+    shared by multiple accounts.
+-   **Auth & KYC** --- checks basic identity-related risk signals such
+    as disposable email and phone validity.
+-   **Clearance** --- combines all module scores into one overall risk
+    score and returns `allow`, `step_up`, or `block`.
+
+The project also contains a **Merchant Dispute Defense** workflow for
+creating a dispute record, generating an evidence dossier, uploading
+evidence, contesting the dispute, and simulating a resolution.
+
+> **Note:** The current "ML Behaviour" module is implemented as a
+> rule-based anomaly scorer. The project structure is ready for
+> replacing it with a trained ML model.
+
+------------------------------------------------------------------------
+
+## 1. Problem Statement
+
+Online payment fraud is difficult to detect using a single signal.
+
+A transaction can look normal by amount but become suspicious when other
+information is considered.
+
+For example:
+
+``` text
+Normal amount?       Yes
+Many recent payments? Yes
+New device?           Yes
+Unusual IP?            Yes
+Shared device?         Yes
+Disposable email?      Yes
 ```
-Online transaction
+
+Looking at only the amount may miss the risk.
+
+There is also a second problem: **merchant disputes**. After a
+successful payment, a merchant may receive a chargeback/dispute and need
+transaction and authorization evidence.
+
+### The problem
+
+A useful risk system should therefore:
+
+1.  Detect suspicious activity before payment.
+2.  Combine different risk signals.
+3.  Explain why a transaction is risky.
+4.  Avoid blocking every unusual transaction.
+5.  Give merchants a workflow for handling disputes and evidence.
+
+------------------------------------------------------------------------
+
+## 2. Solution
+
+AI Risk Manager uses a **multi-layer risk engine**.
+
+``` text
+Customer Transaction
         |
-   -----+-----+-----+-----+-----
-   |     |     |     |         |
-ML score Velocity Geo/IP Link graph Auth/KYC
-   |     |     |     |         |
-   -----+-----+-----+-----+-----
+        v
++---------------------+
+|   Risk Assessment   |
++----------+----------+
+           |
+   +-------+-------+-------+-------+-------+
+   |       |       |       |       |       |
+   v       v       v       v       v       |
+Behaviour Velocity Geo/IP Link   Auth/KYC |
+                         Graph             |
+   |       |       |       |       |       |
+   +-------+-------+-------+-------+-------+
+           |
+           v
+    Risk Aggregator
+           |
+     +-----+------+
+     |            |
+   Score       Decision
+                 |
+       +---------+---------+
+       |         |         |
+     ALLOW    STEP-UP    BLOCK
+```
+
+If the decision is `block`, `/create-order` stops the transaction before
+creating the payment order.
+
+If it is allowed to continue, the server creates the payment order
+through the payment integration.
+
+------------------------------------------------------------------------
+
+# 3. Risk Modules
+
+## 3.1 ML Behaviour
+
+### Simple meaning
+
+**"Does this transaction look different from the user's normal
+behaviour?"**
+
+The current implementation calculates an anomaly score using signals
+such as:
+
+-   transaction amount compared with the user's average
+-   time of day
+-   new device
+-   transactions in the last hour
+-   distance from the previous transaction
+-   VPN-related signal
+-   number of users sharing a device/IP
+
+Example:
+
+``` text
+User normally spends: ₹1,000
+
+Current transaction: ₹10,000
+
+Amount ratio: 10x
         |
- Risk score aggregator (weighted, 0-100)
-        |
-  ------+------+------
-  |            |      |
- Allow     Step-up   Block
-(0-30)     (31-70)  (71-100)
+        v
+Higher behaviour risk
 ```
 
-Only "allow" and "step-up" ever reach the real Razorpay order creation step.
-A "block" decision stops the flow before Razorpay is even called -- no
-order, no payment possible.
+The module returns a score from `0` to `100` and an explanation when the
+behaviour is unusual.
 
----
+### Important
 
-## 1. Getting your free Razorpay test API key
+Despite its name, the current `src/risk_engine/ml_score.js` is **not a
+trained ML model**. It is a rule-based behavioural anomaly scorer.
 
-Razorpay gives every account **free test-mode keys** -- no KYC, no business
-verification, no money involved. This is exactly what you should use for a
-prototype/buildathon project.
+A future version can train a model using the transaction data and
+replace this scorer.
 
-1. Go to https://dashboard.razorpay.com/signup and create an account.
-2. Once logged in, make sure the toggle in the top-left/top-right of the
-   dashboard says **"Test Mode"** (not "Live Mode").
-3. Go to **Settings -> API Keys** (left sidebar).
-4. Click **"Generate Test Key"**.
-5. Copy the **Key Id** (starts with `rzp_test_...`) and **Key Secret**.
-6. In this project folder, copy `.env.example` to `.env` and paste them in:
+------------------------------------------------------------------------
 
-```
-RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxx
-RAZORPAY_KEY_SECRET=your_secret_here
-```
+## 3.2 Velocity
 
-**Never commit `.env` or share your Key Secret with anyone** -- treat it
-like a password. `.gitignore` already excludes it.
+### Simple meaning
 
-Test mode uses Razorpay's fake card numbers (e.g. `4111 1111 1111 1111`,
-any future expiry, any CVV) -- see Razorpay's test card docs on the
-dashboard. No real money ever moves.
+**"Is the user making too many transactions too quickly?"**
 
----
+The system checks recent transaction activity.
 
-## 2. Running it
+Current thresholds:
 
-```bash
-cd razorpay-ai-risk-manager
-python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+-   **3 or more transactions in 1 minute** → high velocity risk
+-   **10 or more transactions in 1 hour** → high velocity risk
+-   half of the hourly limit → elevated risk
 
-cp .env.example .env              # then edit .env with your real keys
+Example:
 
-uvicorn app.main:app --reload
+``` text
+10:01  ₹100
+10:01  ₹100
+10:02  ₹100
+10:02  ₹100
+10:03  ₹100
 ```
 
-Open **http://127.0.0.1:8000** in your browser. Fill in the form, click
-**"Run risk checks"** to see the 5-part checklist and overall score, then
-**"Pay with Razorpay"** to open the real (test-mode) Razorpay checkout.
+A sudden burst can indicate:
 
-The ML model (`ml/model.pkl`) is already trained on synthetic data and
-included in this zip, so it works immediately -- you don't have to train
-anything before your first run.
+-   automated activity
+-   card testing
+-   bots
+-   account takeover attempts
 
----
+------------------------------------------------------------------------
 
-## 3. The 5 checks, and what real problem each one solves
+## 3.3 Geo & IP
 
-| # | Module | File | Problem it solves |
-|---|--------|------|--------------------|
-| 1 | ML behaviour score | `app/risk_engine/ml_score.py` | Stolen card / account takeover -- transaction doesn't match the user's usual pattern |
-| 2 | Velocity check | `app/risk_engine/velocity_check.py` | Bots and "card testing" -- many transactions fired in a short time |
-| 3 | Geo & IP check | `app/risk_engine/geo_ip_check.py` | Cross-border fraud, VPN/proxy abuse, billing/IP country mismatch |
-| 4 | Link/graph check | `app/risk_engine/link_graph_check.py` | Fraud rings -- one device/IP funding many "different" accounts |
-| 5 | Auth & KYC check | `app/risk_engine/auth_kyc_check.py` | False positives -- routes borderline cases to OTP instead of hard-blocking good customers |
+### Simple meaning
 
-Each module returns a `{"score": 0-100, "reason": "..."}` dict.
-`app/risk_engine/aggregator.py` combines all 5 into one weighted overall
-score and a final decision (`allow` / `step_up` / `block`).
+**"Does the transaction's network/location information make sense?"**
 
-You can call `POST /risk-check` directly (see `app/main.py`) to get just
-the checklist without creating a payment -- useful for testing the engine
-on its own.
+The module checks:
 
----
+-   IP country
+-   billing country
+-   proxy/VPN/hosting indicators
 
-## 4. The ML model -- synthetic data now, real data later
+Example:
 
-**Right now:** `ml/generate_synthetic_data.py` creates 8,000 fake but
-realistic-looking transactions with a `is_fraud` label, and
-`ml/train_model.py` trains a `RandomForestClassifier` on them. This is
-what powers Module 1 (ML behaviour score).
-
-Note: the reported ROC-AUC on the synthetic test set is close to 1.0 --
-that's because synthetic fraud patterns are deliberately clean and
-separable, not because the model has "solved" fraud. Real transaction
-data will be much messier and the model will need real tuning.
-
-**Switching to real data once you have it:**
-
-1. Export your real transaction history into `data/transactions.csv`.
-   Each row needs a known fraud/chargeback outcome, using **exactly
-   these column names**:
-
-   ```
-   amount, user_avg_amount, amount_ratio, hour, is_new_device,
-   txns_last_hour, distance_km_from_last_txn, is_vpn,
-   shared_device_count, is_fraud
-   ```
-
-   - `is_fraud` = 1 if that transaction was later confirmed fraud/charged
-     back, 0 otherwise.
-   - If you don't have a real value for a column yet (e.g. `is_vpn`),
-     it's fine to fill it with 0 -- just don't leave it blank/NaN.
-
-2. Re-run training:
-   ```bash
-   python ml/train_model.py
-   ```
-   This overwrites `ml/model.pkl`. Nothing else in the app needs to change
-   -- `ml_score.py` always loads whatever's in that file.
-
-3. As you accumulate more real outcomes, re-run step 2 periodically
-   (weekly/monthly) so the model keeps improving. This retraining loop is
-   normally how production fraud models are kept up to date.
-
----
-
-## 5. Tuning the decision thresholds
-
-In `app/risk_engine/aggregator.py`:
-
-```python
-WEIGHTS = {
-    "ml_score": 0.35,
-    "velocity_score": 0.20,
-    "geo_score": 0.15,
-    "graph_score": 0.15,
-    "auth_score": 0.15,
-}
+``` text
+Billing country: India
+IP country:      US
+Proxy/Hosting:   Yes
 ```
 
-and the score bands (`<=30` allow, `<=70` step_up, else block) are both
-plain numbers you can edit directly -- no ML retraining needed to change
-how strict the system is.
+The system increases the Geo/IP risk score.
 
----
+The module uses external IP-geolocation services when configured. API
+credentials are read from environment variables and are **not stored in
+this README**.
 
-## 6. Folder structure
+------------------------------------------------------------------------
 
+## 3.4 Link Graph
+
+### Simple meaning
+
+**"Is this account connected to many other accounts through the same
+device or IP?"**
+
+Example:
+
+``` text
+Account A ----+
+Account B ----+---- Device X
+Account C ----+
+Account D ----+
 ```
-razorpay-ai-risk-manager/
-├── app/
-│   ├── main.py               FastAPI app + the /risk-check, /create-order,
-│   │                         /verify-payment endpoints
-│   ├── database.py           SQLite helper (transaction history)
-│   ├── schemas.py            Request/response models
-│   ├── razorpay_client.py    Razorpay SDK wrapper
-│   └── risk_engine/
-│       ├── ml_score.py           Module 1
-│       ├── velocity_check.py     Module 2
-│       ├── geo_ip_check.py       Module 3
-│       ├── link_graph_check.py   Module 4
-│       ├── auth_kyc_check.py     Module 5
-│       └── aggregator.py         Combines all 5 into one score
-├── ml/
-│   ├── generate_synthetic_data.py
-│   ├── train_model.py
-│   ├── model.pkl              (pre-trained, included)
-│   └── feature_order.json
+
+If many different accounts use the same device/IP in a short period, the
+system can flag it.
+
+Current logic:
+
+-   2+ shared users → elevated risk
+-   5+ shared users → high risk
+
+This can help identify patterns associated with:
+
+-   fraud rings
+-   mule accounts
+-   account farms
+-   coordinated activity
+
+The current project implements a lightweight relationship check. A
+future version could use a real graph database and graph ML.
+
+------------------------------------------------------------------------
+
+## 3.5 Auth & KYC
+
+### Simple meaning
+
+**"Does the basic customer identity information look reasonable?"**
+
+The current module checks:
+
+-   disposable/temporary email domains
+-   basic phone-number validity
+
+For example:
+
+``` text
+temporary email → higher risk
+invalid phone    → higher risk
+```
+
+The current module is intentionally simple. A production implementation
+could connect real authentication and KYC services.
+
+------------------------------------------------------------------------
+
+# 4. Clearance
+
+Clearance is the **final decision layer**.
+
+It receives the five module scores and combines them.
+
+### Current weights
+
+  Signal           Weight
+  -------------- --------
+  ML Behaviour        35%
+  Velocity            20%
+  Geo & IP            15%
+  Link Graph          15%
+  Auth & KYC          15%
+
+Conceptually:
+
+``` text
+Overall Risk =
+Behaviour × 0.35
++ Velocity × 0.20
++ Geo/IP × 0.15
++ Link Graph × 0.15
++ Auth/KYC × 0.15
+```
+
+### Decision thresholds
+
+    Overall Score Decision
+  --------------- -----------
+           `0–30` `allow`
+          `31–70` `step_up`
+         `71–100` `block`
+
+### Why STEP-UP?
+
+A medium-risk transaction does not always mean fraud.
+
+Instead of immediately rejecting it, the system can send it for
+additional verification or review.
+
+This helps balance:
+
+``` text
+Fraud prevention
+       +
+Customer experience
+```
+
+------------------------------------------------------------------------
+
+# 5. End-to-End Payment Flow
+
+The main payment flow is:
+
+``` text
+1. Customer enters transaction details
+             |
+             v
+2. /risk-check
+             |
+             v
+3. Five risk modules run
+             |
+             v
+4. Risk Aggregator
+             |
+             v
+5. Overall score + decision
+             |
+       +-----+------+
+       |            |
+     BLOCK      ALLOW/STEP-UP
+       |            |
+       X            v
+   Stop payment  /create-order
+                    |
+                    v
+              Payment Order
+                    |
+                    v
+             Checkout / Payment
+                    |
+                    v
+              /verify-payment
+```
+
+The key security idea is:
+
+> **Risk evaluation happens before the payment order is created.**
+
+------------------------------------------------------------------------
+
+# 6. Merchant Dispute Defense
+
+Fraud prevention does not end when a payment succeeds.
+
+A merchant can later receive a payment dispute.
+
+The project includes a merchant workflow for this situation.
+
+``` text
+Dispute Created
+      |
+      v
+Create Dispute Record
+      |
+      v
+Generate Evidence Dossier
+      |
+      v
+Upload Evidence
+      |
+      v
+Contest Dispute
+      |
+      v
+Resolve / Simulate Outcome
+```
+
+The evidence dossier can contain information such as:
+
+-   transaction details
+-   customer information
+-   IP information
+-   authentication information
+-   risk assessment
+-   device continuity
+-   customer activity
+-   fulfillment/service information
+
+This creates a connection between:
+
+**Pre-payment risk detection**
+
+and
+
+**Post-payment dispute defense**
+
+------------------------------------------------------------------------
+
+# 7. Why This Project Is Different
+
+A basic fraud project often looks like:
+
+``` text
+Transaction
+     |
+     v
+One ML model
+     |
+     v
+Fraud / Not Fraud
+```
+
+AI Risk Manager uses a broader approach:
+
+``` text
+Behaviour
+Velocity
+Geo/IP
+Link Graph
+Auth/KYC
+    |
+    v
+Risk Aggregation
+    |
+    v
+ALLOW / STEP-UP / BLOCK
+    |
+    v
+Payment
+    |
+    v
+Dispute Defense
+```
+
+### Main differences
+
+**1. Multi-signal detection**
+
+The system does not depend on a single feature.
+
+**2. Pre-transaction decision**
+
+Risk is checked before payment order creation.
+
+**3. Explainable risk**
+
+Each module can provide a score and reason.
+
+**4. Step-up decision**
+
+Borderline transactions can receive additional verification instead of
+being automatically blocked.
+
+**5. Relationship analysis**
+
+The Link Graph module considers shared devices/IPs across accounts.
+
+**6. Dispute workflow**
+
+The project also demonstrates merchant evidence handling after a
+dispute.
+
+------------------------------------------------------------------------
+
+# 8. Technology Stack
+
+## Backend
+
+-   **Node.js** --- JavaScript runtime
+-   **Express.js** --- REST API server
+-   **Razorpay Node SDK** --- payment order/signature integration
+-   **dotenv** --- environment configuration
+-   **CORS** --- cross-origin request handling
+
+## Frontend
+
+-   **HTML**
+-   **CSS**
+-   **Vanilla JavaScript**
+-   **Razorpay Checkout integration**
+
+No React, Angular, or Vue is required.
+
+## Data
+
+-   CSV transaction dataset for development/ML experimentation
+-   In-memory transaction/dispute storage in `src/db.js`
+
+------------------------------------------------------------------------
+
+# 9. Project Structure
+
+``` text
+airisk-main/
+│
 ├── frontend/
-│   └── index.html             Checkout page + risk checklist UI
+│   ├── index.html
+│   └── demoConfig.js
+│
+├── src/
+│   ├── db.js
+│   ├── razorpay_client.js
+│   │
+│   └── risk_engine/
+│       ├── aggregator.js
+│       ├── auth_kyc_check.js
+│       ├── geo_ip_check.js
+│       ├── link_graph_check.js
+│       ├── ml_score.js
+│       └── velocity_check.js
+│
 ├── data/
-│   └── transactions.csv       Synthetic training data (pre-generated)
-├── requirements.txt
+│   └── transactions.csv
+│
 ├── .env.example
+├── .gitignore
+├── metadata.json
+├── package.json
+├── server.js
 └── README.md
 ```
 
----
+------------------------------------------------------------------------
 
-## 7. Honest limitations (worth saying out loud in your buildathon pitch)
+# 10. Important Files
 
-- This is a **prototype scoring system**, not a production fraud engine --
-  it's meant to demonstrate the architecture and reasoning, not to be
-  deployed as-is against real payments.
-- The ML model is trained on **synthetic** data. It illustrates the
-  approach; a real model needs real, messy, labelled transaction history
-  and ongoing retraining.
-- The "device fingerprint" in the demo frontend is a simple random ID
-  saved in `localStorage` -- a real product would use a proper
-  fingerprinting library.
-- IP geolocation uses a free, rate-limited public API (`ip-api.com`) --
-  fine for a demo, not for production volume.
+  ---------------------------------------------------------------------------
+  File                                    Purpose
+  --------------------------------------- -----------------------------------
+  `server.js`                             Main Express server and API routes
+
+  `src/db.js`                             Stores transaction/dispute data in
+                                          memory
+
+  `src/razorpay_client.js`                Creates orders and verifies payment
+                                          signatures
+
+  `src/risk_engine/ml_score.js`           Behaviour anomaly scoring
+
+  `src/risk_engine/velocity_check.js`     Transaction burst detection
+
+  `src/risk_engine/geo_ip_check.js`       IP and geographic risk
+
+  `src/risk_engine/link_graph_check.js`   Shared device/IP analysis
+
+  `src/risk_engine/auth_kyc_check.js`     Basic Auth/KYC risk checks
+
+  `src/risk_engine/aggregator.js`         Final score and decision
+
+  `frontend/index.html`                   Application interface
+
+  `frontend/demoConfig.js`                Demo configuration/scenarios
+
+  `data/transactions.csv`                 Sample transaction data
+  ---------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+# 11. API Endpoints
+
+## Risk
+
+### `POST /risk-check`
+
+Runs the risk engine and returns:
+
+-   overall score
+-   decision
+-   individual module scores
+-   reasons
+
+### `GET /user-history`
+
+Returns previous transaction and location-related information for a
+user.
+
+### `POST /create-order`
+
+Runs the risk engine first.
+
+If the result is `block`, order creation is stopped.
+
+Otherwise, it attempts to create the payment order.
+
+### `POST /verify-payment`
+
+Verifies the payment signature and records the transaction.
+
+### `GET /health`
+
+Basic server health endpoint.
+
+------------------------------------------------------------------------
+
+# 12. Merchant Dispute Endpoints
+
+``` text
+GET  /api/merchant/disputes
+POST /api/merchant/disputes/simulate
+POST /api/merchant/disputes/:id/generate-evidence
+POST /api/merchant/disputes/:id/upload-document
+POST /api/merchant/disputes/:id/contest
+POST /api/merchant/disputes/:id/resolve
+POST /api/merchant/webhook
+```
+
+These endpoints support the project's dispute-defense demonstration.
+
+------------------------------------------------------------------------
+
+# 13. Data for Machine Learning
+
+The project includes:
+
+``` text
+data/transactions.csv
+```
+
+The dataset contains transaction-style features such as:
+
+-   transaction amount
+-   average amount
+-   amount ratio
+-   transaction hour
+-   new-device flag
+-   transactions in the last hour
+-   distance from previous transaction
+-   VPN indicator
+-   shared-device count
+-   fraud label
+
+These features can be used to train a real fraud-classification model.
+
+### Possible ML pipeline
+
+``` text
+CSV Data
+   |
+   v
+Clean Data
+   |
+   v
+Feature Engineering
+   |
+   v
+Train/Test Split
+   |
+   v
+Train Model
+   |
+   v
+Evaluate
+   |
+   v
+Save Model
+   |
+   v
+Use Model inside ML Behaviour
+```
+
+Suitable models include:
+
+-   Logistic Regression
+-   Random Forest
+-   XGBoost
+-   Gradient Boosting
+
+For fraud data, accuracy alone is not enough. Precision, recall,
+F1-score, ROC-AUC/PR-AUC, and false-positive rate should also be
+considered.
+
+------------------------------------------------------------------------
+
+# 14. Running the Project
+
+## Requirements
+
+Install:
+
+-   Node.js
+-   npm
+
+Check:
+
+``` bash
+node --version
+npm --version
+```
+
+## Install dependencies
+
+``` bash
+npm install
+```
+
+## Configure environment
+
+Copy `.env.example` to `.env` and add your own local credentials where
+required.
+
+``` bash
+cp .env.example .env
+```
+
+**Never commit `.env` to GitHub.**
+
+The repository's `.gitignore` is intended to keep secrets out of Git.
+
+## Start the server
+
+``` bash
+npm start
+```
+
+or:
+
+``` bash
+npm run dev
+```
+
+The application runs on:
+
+``` text
+http://localhost:3000
+```
+
+------------------------------------------------------------------------
+
+# 15. Example Risk Result
+
+A risk assessment can conceptually look like:
+
+``` json
+{
+  "overall_score": 76.5,
+  "decision": "block",
+  "breakdown": {
+    "ml_score": 82,
+    "velocity_score": 90,
+    "geo_score": 40,
+    "graph_score": 40,
+    "auth_score": 0
+  },
+  "reasons": [
+    "Transaction pattern is very different from this user's usual behaviour",
+    "Higher transaction frequency"
+  ]
+}
+```
+
+The important point is that the system gives both:
+
+``` text
+Risk score
++
+Reason
+```
+
+rather than only returning a fraud label.
+
+------------------------------------------------------------------------
+
+# 16. Security: Keep API Keys Private
+
+Do **not** put secret keys inside:
+
+-   `README.md`
+-   frontend JavaScript
+-   HTML
+-   Git commits
+-   screenshots
+-   public GitHub files
+
+Use `.env` locally.
+
+Example:
+
+``` env
+RAZORPAY_KEY_ID=your_key_here
+RAZORPAY_KEY_SECRET=your_secret_here
+GEO_API_KEY=your_key_here
+```
+
+Only the variable names should be documented publicly.
+
+If a real secret has ever been committed to GitHub, revoke/rotate it
+before publishing the repository.
+
+------------------------------------------------------------------------
+
+# 17. Current Implementation vs Future ML
+
+The current system is best described as a **risk-engine prototype with a
+rule-based behavioural scorer**.
+
+### Current
+
+``` text
+Behaviour Rules
++
+Velocity Rules
++
+Geo/IP Rules
++
+Link Rules
++
+Auth/KYC Rules
+        |
+        v
+Weighted Risk Score
+        |
+        v
+Decision
+```
+
+### Future
+
+``` text
+Historical Transactions
+        |
+        v
+Feature Engineering
+        |
+        v
+Trained ML Model
+        |
+        v
+Fraud Probability
+        |
+        +
+Other Risk Signals
+        |
+        v
+Risk Aggregator
+        |
+        v
+Decision
+```
+
+This makes the project easy to improve without redesigning the entire
+application.
+
+------------------------------------------------------------------------
+
+# 18. Future Improvements
+
+### Real ML model
+
+Replace the current behavioural rules with a trained and validated fraud
+model.
+
+### Persistent database
+
+Replace in-memory storage with PostgreSQL, MySQL, MongoDB, or another
+appropriate database.
+
+### Real graph analysis
+
+Move from shared-count checks to a graph database and graph-based fraud
+detection.
+
+### Real KYC/authentication
+
+Integrate proper authentication and identity-verification services.
+
+### Better feature engineering
+
+Add features such as:
+
+-   account age
+-   historical spending patterns
+-   failed payment count
+-   device age
+-   IP history
+-   transaction time patterns
+-   merchant/customer history
+
+### Model monitoring
+
+Track:
+
+-   fraud rate
+-   false positives
+-   false negatives
+-   model drift
+-   approval rate
+-   chargeback rate
+
+------------------------------------------------------------------------
+
+# 19. Short Project Explanation
+
+**AI Risk Manager is a pre-transaction fraud detection system that
+evaluates a payment using behavioural, velocity, geographic/IP,
+relationship, and authentication signals. It combines these signals into
+a weighted risk score and makes an ALLOW, STEP-UP, or BLOCK decision
+before payment order creation. It also provides a merchant
+dispute-defense workflow for organizing evidence after a payment
+dispute.**
+
+------------------------------------------------------------------------
+
+## Key Idea
+
+``` text
+                 PAYMENT
+                    |
+                    v
+       +------------------------+
+       |     RISK ENGINE        |
+       +------------------------+
+          |    |    |    |    |
+          v    v    v    v    v
+         ML  Velocity Geo Link Auth
+          \    |    /    |    /
+           \   |   /     |   /
+            +--+--+------+--+
+                   |
+                   v
+             CLEARANCE
+                   |
+        +----------+----------+
+        |          |          |
+      ALLOW     STEP-UP     BLOCK
+        |
+        v
+      PAYMENT
+        |
+        v
+ DISPUTE DEFENSE
+```
+
+**The core idea is simple: don't judge a payment from one signal. Look
+at the complete picture before deciding.**

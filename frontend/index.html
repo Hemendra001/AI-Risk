@@ -1568,7 +1568,7 @@ async function triggerRazorpayCheckout(mode = "interactive") {
 }
 
 /* Merchant Portal: Dispute Defense */
-async function loadMerchantDisputes() {
+window.loadMerchantDisputes = async function() {
   state.disputesLoading = true;
   try {
     const res = await fetch("/api/merchant/disputes");
@@ -1582,7 +1582,8 @@ async function loadMerchantDisputes() {
   }
   state.disputesLoading = false;
   renderPanel();
-}
+};
+const loadMerchantDisputes = window.loadMerchantDisputes;
 
 window.simulateNewDispute = async function() {
   try {
@@ -1808,6 +1809,9 @@ window.actionResolveDispute = async function(id, outcome) {
     alert("Failed to resolve dispute");
   }
 };
+
+window.renderStepsBar = renderStepsBar;
+window.renderPanel = renderPanel;
 
 renderStepsBar();
 renderPanel();
