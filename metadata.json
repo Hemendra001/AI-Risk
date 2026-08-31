@@ -1,6 +1,6 @@
 {
-  "name": "AI Risk Manager",
-  "description": "Pre-transaction AI risk scoring and merchant-side automated chargeback friendly fraud defense integrated with Razorpay.",
+  "name": "AI Risk Clearance",
+  "description": "Pre-transaction multi-vector AI fraud evaluation and automated risk mitigation for Razorpay checkout.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
